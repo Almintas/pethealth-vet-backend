@@ -6,6 +6,7 @@ import type { UserDocument } from '../users/schemas/user.schema';
 import { UserObject } from '../users/dto/user.object';
 import { AuthPayload } from './dto/auth-payload.object';
 import { LoginInput } from './dto/login.input';
+import { RegisterVeterinarianInput } from './dto/register-veterinarian.input';
 import { AuthService } from './auth.service';
 import { GqlAuthGuard } from './guards/gql-auth.guard';
 
@@ -16,6 +17,13 @@ export class AuthResolver {
   @Mutation(() => AuthPayload)
   async login(@Args('input') input: LoginInput): Promise<AuthPayload> {
     return this.authService.login(input.email, input.password);
+  }
+
+  @Mutation(() => AuthPayload)
+  async registerVeterinarian(
+    @Args('input') input: RegisterVeterinarianInput,
+  ): Promise<AuthPayload> {
+    return this.authService.registerVeterinarian(input);
   }
 
   @Query(() => UserObject, { name: 'me' })

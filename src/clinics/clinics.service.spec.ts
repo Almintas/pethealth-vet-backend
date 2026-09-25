@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { getModelToken } from '@nestjs/mongoose';
+import { BadRequestException } from '@nestjs/common';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Types } from 'mongoose';
+import { ClinicMembershipStatus } from '../common/enums/clinic-membership-status.enum';
+import { VeterinariansService } from '../veterinarians/veterinarians.service';
+import { ClinicMembership } from './schemas/clinic-membership.schema';
 import { Clinic } from './schemas/clinic.schema';
 import { ClinicsService } from './clinics.service';
 
@@ -10,7 +15,30 @@ describe('ClinicsService', () => {
   const clinicModel = jest.fn().mockImplementation((data) => ({
     ...data,
     save,
-  })) as jest.Mock;
+  })) as jest.Mock & {
+    create: jest.Mock;
+    find: jest.Mock;
+    findById: jest.Mock;
+    findByIdAndDelete: jest.Mock;
+  };
+  clinicModel.create = jest.fn();
+  clinicModel.find = jest.fn();
+  clinicModel.findById = jest.fn();
+  clinicModel.findByIdAndDelete = jest.fn();
+
+  const membershipModel = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+  };
+
+  const connection = {
+    startSession: jest.fn(),
+  };
+
+  const veterinariansService = {
+    findOptionalByUserId: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -18,6 +46,12 @@ describe('ClinicsService', () => {
       providers: [
         ClinicsService,
         { provide: getModelToken(Clinic.name), useValue: clinicModel },
+        {
+          provide: getModelToken(ClinicMembership.name),
+          useValue: membershipModel,
+        },
+        { provide: getConnectionToken(), useValue: connection },
+        { provide: VeterinariansService, useValue: veterinariansService },
       ],
     }).compile();
 
@@ -34,5 +68,53 @@ describe('ClinicsService', () => {
 
     const clinic = await service.create({ name: 'Happy Paws' });
     expect(clinic.name).toBe('Happy Paws');
+  });
+
+  it('rejects clinic creation without veterinarian profile', async () => {
+    veterinariansService.findOptionalByUserId.mockResolvedValue(null);
+
+    await expect(
+      service.createClinicForUser('user-id', { name: 'Happy Paws' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('returns only clinics with active memberships for myClinics', async () => {
+    const profileId = new Types.ObjectId();
+    const clinicId = new Types.ObjectId();
+    veterinariansService.findOptionalByUserId.mockResolvedValue({
+      _id: profileId,
+    });
+    membershipModel.find.mockReturnValue({
+      exec: async () => [
+        {
+          veterinarianProfileId: profileId,
+          clinicId,
+          status: ClinicMembershipStatus.ACTIVE,
+        },
+      ],
+    });
+    clinicModel.find.mockReturnValue({
+      exec: async () => [
+        {
+          _id: clinicId,
+          name: 'Happy Paws',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+
+    const clinics = await service.findMyClinics('user-id');
+    expect(clinics).toHaveLength(1);
+    expect(clinics[0].name).toBe('Happy Paws');
+    expect(clinicModel.find).toHaveBeenCalledWith({
+      _id: { $in: [clinicId] },
+    });
+  });
+
+  it('returns empty myClinics when user has no profile', async () => {
+    veterinariansService.findOptionalByUserId.mockResolvedValue(null);
+    const clinics = await service.findMyClinics('user-id');
+    expect(clinics).toEqual([]);
   });
 });

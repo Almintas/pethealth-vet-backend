@@ -42,6 +42,14 @@ export class VeterinariansService {
     return profile.save();
   }
 
+  async findOptionalByUserId(
+    userId: string,
+  ): Promise<VeterinarianProfileDocument | null> {
+    return this.profileModel
+      .findOne({ userId: new Types.ObjectId(userId) })
+      .exec();
+  }
+
   async findByUserId(userId: string): Promise<VeterinarianProfileDocument> {
     const profile = await this.profileModel
       .findOne({ userId: new Types.ObjectId(userId) })

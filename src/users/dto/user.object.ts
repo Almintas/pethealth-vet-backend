@@ -1,5 +1,6 @@
 import { Field, ID, ObjectType } from '@nestjs/graphql';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { VeterinarianProfileObject } from '../../veterinarians/dto/veterinarian-profile.object';
 
 @ObjectType('User')
 export class UserObject {
@@ -17,4 +18,7 @@ export class UserObject {
 
   @Field()
   updatedAt!: Date;
+
+  @Field(() => VeterinarianProfileObject, { nullable: true })
+  veterinarianProfile?: VeterinarianProfileObject | null;
 }
