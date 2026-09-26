@@ -7,6 +7,11 @@ import { join } from 'node:path';
 import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { AuthModule } from './auth/auth.module';
+import { ClinicPetAccessModule } from './clinic-pet-access/clinic-pet-access.module';
+import { AppointmentsModule } from './appointments/appointments.module';
+import { MedicalRecordsModule } from './medical-records/medical-records.module';
+import { MedicationsModule } from './medications/medications.module';
+import { PatientsModule } from './patients/patients.module';
 import { ClinicsModule } from './clinics/clinics.module';
 import { CommonModule } from './common/common.module';
 import { HealthModule } from './health/health.module';
@@ -42,6 +47,11 @@ import { VeterinariansModule } from './veterinarians/veterinarians.module';
     AuthModule,
     VeterinariansModule,
     ClinicsModule,
+    ClinicPetAccessModule,
+    PatientsModule,
+    AppointmentsModule,
+    MedicalRecordsModule,
+    MedicationsModule,
     HealthModule,
   ],
 })

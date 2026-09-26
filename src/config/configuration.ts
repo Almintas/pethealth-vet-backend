@@ -8,4 +8,8 @@ export default () => ({
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
   },
+  owner: {
+    graphqlUrl: process.env.OWNER_GRAPHQL_URL,
+    serviceSecret: process.env.OWNER_SERVICE_SECRET,
+  },
 });

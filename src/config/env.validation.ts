@@ -26,4 +26,24 @@ export const envValidationSchema = Joi.object({
     otherwise: Joi.string().default('development-jwt-secret-change-me'),
   }),
   JWT_EXPIRES_IN: Joi.string().default('7d'),
+  OWNER_GRAPHQL_URL: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().uri().required().messages({
+      'any.required':
+        'OWNER_GRAPHQL_URL is required when NODE_ENV is production',
+    }),
+    otherwise: Joi.string()
+      .uri()
+      .default('http://localhost:3000/graphql'),
+  }),
+  OWNER_SERVICE_SECRET: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().min(32).required().messages({
+      'any.required':
+        'OWNER_SERVICE_SECRET is required when NODE_ENV is production',
+      'string.min':
+        'OWNER_SERVICE_SECRET must be at least 32 characters in production',
+    }),
+    otherwise: Joi.string().default('dev-owner-service-secret-change-me'),
+  }),
 });
