@@ -11,6 +11,7 @@ import { ClinicPetAccessModule } from './clinic-pet-access/clinic-pet-access.mod
 import { AppointmentsModule } from './appointments/appointments.module';
 import { MedicalRecordsModule } from './medical-records/medical-records.module';
 import { MedicationsModule } from './medications/medications.module';
+import { VaccinationsModule } from './vaccinations/vaccinations.module';
 import { PatientsModule } from './patients/patients.module';
 import { ClinicsModule } from './clinics/clinics.module';
 import { CommonModule } from './common/common.module';
@@ -52,6 +53,7 @@ import { VeterinariansModule } from './veterinarians/veterinarians.module';
     AppointmentsModule,
     MedicalRecordsModule,
     MedicationsModule,
+    VaccinationsModule,
     HealthModule,
   ],
 })

@@ -8,6 +8,7 @@ import { UserRole } from '../common/enums/user-role.enum';
 import type { UserDocument } from '../users/schemas/user.schema';
 import { AppointmentsService } from './appointments.service';
 import { VetAppointmentObject } from './dto/appointment.object';
+import { AppointmentsScheduleQueryInput } from './dto/appointments-schedule-query.input';
 import { CreateVetAppointmentInput } from './dto/create-vet-appointment.input';
 import { UpdateVetAppointmentInput } from './dto/update-vet-appointment.input';
 
@@ -24,8 +25,30 @@ export class AppointmentsResolver {
   )
   myAppointments(
     @CurrentUser() user: UserDocument,
+    @Args('query', { type: () => AppointmentsScheduleQueryInput, nullable: true })
+    query?: AppointmentsScheduleQueryInput,
   ): Promise<VetAppointmentObject[]> {
-    return this.appointmentsService.getMyAppointments(user._id.toString());
+    return this.appointmentsService.getMyAppointments(user._id.toString(), query);
+  }
+
+  @Query(() => [VetAppointmentObject], { name: 'patientAppointments' })
+  @UseGuards(GqlAuthGuard, GqlRolesGuard)
+  @Roles(
+    UserRole.VETERINARIAN,
+    UserRole.CLINIC_ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  patientAppointments(
+    @CurrentUser() user: UserDocument,
+    @Args('patientId', { type: () => ID }) patientId: string,
+    @Args('query', { type: () => AppointmentsScheduleQueryInput, nullable: true })
+    query?: AppointmentsScheduleQueryInput,
+  ): Promise<VetAppointmentObject[]> {
+    return this.appointmentsService.getPatientAppointments(
+      user._id.toString(),
+      patientId,
+      query,
+    );
   }
 
   @Query(() => VetAppointmentObject, { name: 'vetAppointment' })

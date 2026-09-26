@@ -41,6 +41,7 @@ describe('AppointmentsService', () => {
   const clinicA = new Types.ObjectId().toString();
   const clinicB = new Types.ObjectId().toString();
   const petId = new Types.ObjectId().toString();
+  const otherPetId = new Types.ObjectId().toString();
   const appointmentId = new Types.ObjectId().toString();
   const vetProfileId = new Types.ObjectId();
 
@@ -120,6 +121,52 @@ describe('AppointmentsService', () => {
     expect(ownerAppointmentsClient.createAppointment).not.toHaveBeenCalled();
   });
 
+  it('returns a newly created appointment when listing the schedule', async () => {
+    const scheduledAt = new Date('2026-09-26T12:00:00.000Z');
+    clinicPetAccessService.findActiveAccessForClinicAndPet.mockResolvedValue({
+      petId,
+      clinicId: clinicA,
+    });
+    clinicsService.findById.mockResolvedValue({ name: 'Clinic A' });
+    ownerAppointmentsClient.createAppointment.mockResolvedValue({
+      id: appointmentId,
+      petId,
+      scheduledAt: scheduledAt.toISOString(),
+      type: 'CHECKUP',
+      vetClinicId: clinicA,
+      status: AppointmentStatus.SCHEDULED,
+      clinicName: 'Clinic A',
+      veterinarianName: 'Dr Vet',
+    });
+    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue([
+      { petId, clinicId: new Types.ObjectId(clinicA) },
+    ]);
+
+    await service.createAppointment(userId, {
+      clinicId: clinicA,
+      petId,
+      scheduledAt,
+      type: 'CHECKUP',
+    });
+
+    ownerAppointmentsClient.fetchAppointmentsByPetIds.mockResolvedValue([
+      {
+        id: appointmentId,
+        petId: ` ${petId} `,
+        scheduledAt: scheduledAt.toISOString(),
+        type: 'CHECKUP',
+        vetClinicId: ` ${clinicA} `,
+        status: AppointmentStatus.SCHEDULED,
+      },
+    ]);
+
+    const appointments = await service.getMyAppointments(userId);
+
+    expect(appointments).toHaveLength(1);
+    expect(appointments[0]?.id).toBe(appointmentId);
+    expect(appointments[0]?.scheduledAt.toISOString()).toBe(scheduledAt.toISOString());
+  });
+
   it('creates an appointment for an authorized patient', async () => {
     clinicPetAccessService.findActiveAccessForClinicAndPet.mockResolvedValue({
       petId,
@@ -171,6 +218,41 @@ describe('AppointmentsService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('marks an appointment as completed', async () => {
+    ownerAppointmentsClient.fetchAppointmentById.mockResolvedValue({
+      id: appointmentId,
+      petId,
+      scheduledAt: new Date().toISOString(),
+      type: 'CHECKUP',
+      vetClinicId: clinicA,
+      status: AppointmentStatus.SCHEDULED,
+    });
+    clinicPetAccessService.assertUserHasActiveAccessToPet.mockResolvedValue([
+      { petId, clinicId: new Types.ObjectId(clinicA) },
+    ]);
+    clinicPetAccessService.findActiveAccessForClinicAndPet.mockResolvedValue({
+      petId,
+      clinicId: clinicA,
+    });
+    ownerAppointmentsClient.updateAppointment.mockResolvedValue({
+      id: appointmentId,
+      petId,
+      scheduledAt: new Date().toISOString(),
+      type: 'CHECKUP',
+      vetClinicId: clinicA,
+      status: AppointmentStatus.COMPLETED,
+    });
+    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue([
+      { petId, clinicId: new Types.ObjectId(clinicA) },
+    ]);
+
+    const appointment = await service.updateAppointment(userId, appointmentId, {
+      status: AppointmentStatus.COMPLETED,
+    });
+
+    expect(appointment.status).toBe(AppointmentStatus.COMPLETED);
+  });
+
   it('cancels an appointment using CANCELLED status', async () => {
     ownerAppointmentsClient.fetchAppointmentById.mockResolvedValue({
       id: appointmentId,
@@ -212,5 +294,91 @@ describe('AppointmentsService', () => {
     expect(
       (service as { deleteAppointment?: unknown }).deleteAppointment,
     ).toBeUndefined();
+  });
+
+  it('returns appointments inside the requested schedule day window', async () => {
+    const scheduledAt = new Date('2026-09-26T11:30:00.000Z');
+    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue([
+      { petId, clinicId: new Types.ObjectId(clinicA) },
+    ]);
+    ownerAppointmentsClient.fetchAppointmentsByPetIds.mockResolvedValue([
+      {
+        id: appointmentId,
+        petId,
+        scheduledAt: scheduledAt.toISOString(),
+        type: 'CHECKUP',
+        vetClinicId: clinicA,
+        status: AppointmentStatus.SCHEDULED,
+      },
+    ]);
+    const scheduledFrom = new Date('2026-09-25T21:00:00.000Z');
+    const scheduledTo = new Date('2026-09-26T20:59:59.999Z');
+
+    const appointments = await service.getMyAppointments(userId, {
+      scheduledFrom,
+      scheduledTo,
+    });
+
+    expect(ownerAppointmentsClient.fetchAppointmentsByPetIds).toHaveBeenCalledWith(
+      [petId],
+      scheduledFrom.toISOString(),
+      scheduledTo.toISOString(),
+    );
+    expect(appointments).toHaveLength(1);
+    expect(appointments[0]?.id).toBe(appointmentId);
+  });
+
+  it('passes schedule window to owner when listing appointments', async () => {
+    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue([
+      { petId, clinicId: new Types.ObjectId(clinicA) },
+    ]);
+    ownerAppointmentsClient.fetchAppointmentsByPetIds.mockResolvedValue([]);
+    const scheduledFrom = new Date('2026-09-26T00:00:00.000Z');
+    const scheduledTo = new Date('2026-09-26T23:59:59.999Z');
+
+    await service.getMyAppointments(userId, { scheduledFrom, scheduledTo });
+
+    expect(ownerAppointmentsClient.fetchAppointmentsByPetIds).toHaveBeenCalledWith(
+      [petId],
+      scheduledFrom.toISOString(),
+      scheduledTo.toISOString(),
+    );
+  });
+
+  it('lists patient appointments only for authorized patient', async () => {
+    clinicPetAccessService.assertUserHasActiveAccessToPet.mockResolvedValue(undefined);
+    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue([
+      { petId, clinicId: new Types.ObjectId(clinicA) },
+    ]);
+    ownerAppointmentsClient.fetchAppointmentsByPetIds.mockResolvedValue([
+      {
+        id: appointmentId,
+        petId,
+        scheduledAt: new Date().toISOString(),
+        type: 'CHECKUP',
+        vetClinicId: clinicA,
+        status: AppointmentStatus.SCHEDULED,
+      },
+    ]);
+
+    const appointments = await service.getPatientAppointments(userId, petId);
+
+    expect(appointments).toHaveLength(1);
+    expect(ownerAppointmentsClient.fetchAppointmentsByPetIds).toHaveBeenCalledWith(
+      [petId],
+      expect.any(String),
+      expect.any(String),
+    );
+  });
+
+  it('rejects patient appointments for unauthorized patient', async () => {
+    clinicPetAccessService.assertUserHasActiveAccessToPet.mockResolvedValue(undefined);
+    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue([
+      { petId, clinicId: new Types.ObjectId(clinicA) },
+    ]);
+
+    await expect(
+      service.getPatientAppointments(userId, otherPetId),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

@@ -14,6 +14,7 @@ import {
 import { OwnerPetsClient } from '../owner-integration/owner-pets.client';
 import { VeterinariansService } from '../veterinarians/veterinarians.service';
 import { VetAppointmentObject } from './dto/appointment.object';
+import { AppointmentsScheduleQueryInput } from './dto/appointments-schedule-query.input';
 import { CreateVetAppointmentInput } from './dto/create-vet-appointment.input';
 import { UpdateVetAppointmentInput } from './dto/update-vet-appointment.input';
 
@@ -28,20 +29,50 @@ export class AppointmentsService {
     private readonly veterinariansService: VeterinariansService,
   ) {}
 
-  async getMyAppointments(userId: string): Promise<VetAppointmentObject[]> {
+  async getMyAppointments(
+    userId: string,
+    query?: AppointmentsScheduleQueryInput,
+  ): Promise<VetAppointmentObject[]> {
     const context = await this.buildAccessContext(userId);
     if (!context.petIds.length) {
       return [];
     }
 
-    const scheduledFrom = new Date();
-    scheduledFrom.setDate(scheduledFrom.getDate() - 30);
-    const scheduledTo = new Date();
-    scheduledTo.setFullYear(scheduledTo.getFullYear() + 1);
+    const { scheduledFrom, scheduledTo } = this.resolveScheduleWindow(query);
 
     const ownerAppointments =
       await this.ownerAppointmentsClient.fetchAppointmentsByPetIds(
         context.petIds,
+        scheduledFrom.toISOString(),
+        scheduledTo.toISOString(),
+      );
+
+    const visible = ownerAppointments.filter((appointment) =>
+      this.canViewAppointment(appointment, context),
+    );
+
+    return this.mapAppointments(visible, context.patientMap);
+  }
+
+  async getPatientAppointments(
+    userId: string,
+    patientId: string,
+    query?: AppointmentsScheduleQueryInput,
+  ): Promise<VetAppointmentObject[]> {
+    await this.clinicPetAccessService.assertUserHasActiveAccessToPet(
+      userId,
+      patientId,
+    );
+    const context = await this.buildAccessContext(userId);
+    if (!context.petIds.includes(patientId)) {
+      throw new ForbiddenException('No access to this patient');
+    }
+
+    const { scheduledFrom, scheduledTo } = this.resolveScheduleWindow(query);
+
+    const ownerAppointments =
+      await this.ownerAppointmentsClient.fetchAppointmentsByPetIds(
+        [patientId],
         scheduledFrom.toISOString(),
         scheduledTo.toISOString(),
       );
@@ -142,22 +173,46 @@ export class AppointmentsService {
     });
   }
 
+  private resolveScheduleWindow(query?: AppointmentsScheduleQueryInput): {
+    scheduledFrom: Date;
+    scheduledTo: Date;
+  } {
+    if (query?.scheduledFrom || query?.scheduledTo) {
+      const scheduledFrom = query.scheduledFrom ?? new Date(0);
+      const scheduledTo = query.scheduledTo ?? new Date('2100-01-01T00:00:00.000Z');
+      return { scheduledFrom, scheduledTo };
+    }
+
+    const scheduledFrom = new Date();
+    scheduledFrom.setDate(scheduledFrom.getDate() - 30);
+    const scheduledTo = new Date();
+    scheduledTo.setFullYear(scheduledTo.getFullYear() + 1);
+    return { scheduledFrom, scheduledTo };
+  }
+
   private async buildAccessContext(userId: string) {
     const accessRecords =
       await this.clinicPetAccessService.findActiveAccessForVeterinarianUser(
         userId,
       );
-    const petIds = [...new Set(accessRecords.map((record) => record.petId.trim()))];
+    const petIds = [
+      ...new Set(accessRecords.map((record) => record.petId.trim())),
+    ];
     const clinicIds = new Set(
       accessRecords.map((record) => record.clinicId.toString()),
+    );
+    const petClinicPairs = new Set(
+      accessRecords.map(
+        (record) => `${record.petId.trim()}:${record.clinicId.toString()}`,
+      ),
     );
 
     const ownerPets = await this.ownerPetsClient.fetchPetsByIds(petIds);
     const patientMap = new Map(
       ownerPets.map((pet) => [
-        pet.id,
+        pet.id.trim(),
         {
-          id: pet.id,
+          id: pet.id.trim(),
           name: pet.name,
           species: pet.species,
           breed: pet.breed,
@@ -168,7 +223,7 @@ export class AppointmentsService {
       ]),
     );
 
-    return { petIds, clinicIds, patientMap };
+    return { petIds, clinicIds, petClinicPairs, patientMap };
   }
 
   private canViewAppointment(
@@ -176,16 +231,22 @@ export class AppointmentsService {
     context: {
       petIds: string[];
       clinicIds: Set<string>;
+      petClinicPairs: Set<string>;
       patientMap: Map<string, VetAppointmentObject['patient']>;
     },
   ): boolean {
-    if (!context.petIds.includes(appointment.petId)) {
+    const petId = appointment.petId?.trim();
+    if (!petId || !context.petIds.includes(petId)) {
       return false;
     }
-    if (!appointment.vetClinicId) {
+    const clinicId = appointment.vetClinicId?.trim();
+    if (!clinicId) {
       return true;
     }
-    return context.clinicIds.has(appointment.vetClinicId);
+    if (context.petClinicPairs.has(`${petId}:${clinicId}`)) {
+      return true;
+    }
+    return context.clinicIds.has(clinicId);
   }
 
   private async assertAccessAtClinic(
@@ -231,13 +292,13 @@ export class AppointmentsService {
     patientMap: Map<string, VetAppointmentObject['patient']>,
   ): Promise<VetAppointmentObject[]> {
     const missingPetIds = appointments
-      .map((appointment) => appointment.petId)
+      .map((appointment) => appointment.petId.trim())
       .filter((petId) => !patientMap.has(petId));
     if (missingPetIds.length) {
       const pets = await this.ownerPetsClient.fetchPetsByIds(missingPetIds);
       for (const pet of pets) {
-        patientMap.set(pet.id, {
-          id: pet.id,
+        patientMap.set(pet.id.trim(), {
+          id: pet.id.trim(),
           name: pet.name,
           species: pet.species,
           breed: pet.breed,
@@ -250,7 +311,7 @@ export class AppointmentsService {
 
     const mapped: VetAppointmentObject[] = [];
     for (const appointment of appointments) {
-      const patient = patientMap.get(appointment.petId);
+      const patient = patientMap.get(appointment.petId.trim());
       if (!patient) {
         continue;
       }
