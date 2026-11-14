@@ -25,6 +25,12 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Requirements
+
+- Node.js 24.9 or newer (see `.nvmrc`). NestJS 12 ships as ES modules, and Jest
+  can only load them on Node 24.9+ with `--experimental-vm-modules`, which the
+  `test` scripts pass for you.
+
 ## Project setup
 
 ```bash
