@@ -1,5 +1,5 @@
 import { Field, InputType } from '@nestjs/graphql';
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsString, MinLength } from 'class-validator';
 
 @InputType()
 export class RegisterVeterinarianInput {
@@ -22,8 +22,9 @@ export class RegisterVeterinarianInput {
   @MinLength(1)
   lastName!: string;
 
-  @Field({ nullable: true })
-  @IsOptional()
+  /** Required so PetHealth can verify the vet against the official register. */
+  @Field()
   @IsString()
-  licenseNumber?: string;
+  @MinLength(1)
+  licenseNumber!: string;
 }

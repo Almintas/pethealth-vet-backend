@@ -93,6 +93,7 @@ describe('AuthService', () => {
       password: 'password123',
       firstName: 'Jane',
       lastName: 'Doe',
+      licenseNumber: 'VET-12345',
     });
 
     expect(usersService.create).toHaveBeenCalledWith({
@@ -122,6 +123,7 @@ describe('AuthService', () => {
         password: 'password123',
         firstName: 'Jane',
         lastName: 'Doe',
+        licenseNumber: 'VET-12345',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(usersService.deleteById).toHaveBeenCalledWith('user-id');
@@ -138,6 +140,7 @@ describe('AuthService', () => {
         password: 'password123',
         firstName: 'Jane',
         lastName: 'Doe',
+        licenseNumber: 'VET-12345',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
