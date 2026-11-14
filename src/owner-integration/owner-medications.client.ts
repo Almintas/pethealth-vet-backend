@@ -1,10 +1,6 @@
-import {
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OWNER_SERVICE_SECRET_HEADER } from './owner-integration.constants';
+import { requestOwnerGraphql } from './owner-graphql.request';
 
 export type OwnerCanonicalMedication = {
   id: string;
@@ -211,56 +207,21 @@ export class OwnerMedicationsClient {
     return this.postGraphql(query, variables, resultKey, failureMessage);
   }
 
-  private async postGraphql<T>(
+  private postGraphql<T>(
     query: string,
     variables: Record<string, unknown>,
     resultKey: keyof NonNullable<OwnerGraphqlResponse['data']>,
     failureMessage: string,
   ): Promise<T> {
-    const url = this.configService.get<string>('owner.graphqlUrl')?.trim();
-    const secret = this.configService.get<string>('owner.serviceSecret')?.trim();
-    if (!url || !secret) {
-      throw new ServiceUnavailableException(
-        'Owner medication integration is not configured',
-      );
-    }
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          [OWNER_SERVICE_SECRET_HEADER]: secret,
-        },
-        body: JSON.stringify({ query, variables }),
-      });
-
-      if (!response.ok) {
-        this.logger.warn(
-          `Owner backend responded with HTTP ${response.status} for medications`,
-        );
-        throw new ServiceUnavailableException(failureMessage);
-      }
-
-      const payload = (await response.json()) as OwnerGraphqlResponse;
-      if (payload.errors?.length) {
-        this.logger.warn(
-          `Owner GraphQL error: ${payload.errors[0]?.message ?? 'unknown'}`,
-        );
-        throw new ServiceUnavailableException(failureMessage);
-      }
-
-      const result = payload.data?.[resultKey] as T | undefined;
-      if (result === undefined) {
-        throw new ServiceUnavailableException(failureMessage);
-      }
-      return result;
-    } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
-        throw error;
-      }
-      this.logger.warn('Owner backend request failed for medications');
-      throw new ServiceUnavailableException(failureMessage);
-    }
+    return requestOwnerGraphql<T>({
+      configService: this.configService,
+      logger: this.logger,
+      query,
+      variables,
+      resultKey,
+      failureMessage,
+      notConfiguredMessage: 'Owner medication integration is not configured',
+      allowNullResult: true,
+    });
   }
 }

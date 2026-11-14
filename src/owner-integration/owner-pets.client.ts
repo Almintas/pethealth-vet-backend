@@ -1,12 +1,6 @@
-import {
-  BadGatewayException,
-  HttpException,
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OWNER_SERVICE_SECRET_HEADER } from './owner-integration.constants';
+import { requestOwnerGraphql } from './owner-graphql.request';
 
 export type OwnerPetOwnerSummary = {
   id: string;
@@ -75,14 +69,6 @@ export class OwnerPetsClient {
       return [];
     }
 
-    const url = this.configService.get<string>('owner.graphqlUrl')?.trim();
-    const secret = this.configService.get<string>('owner.serviceSecret')?.trim();
-    if (!url || !secret) {
-      throw new ServiceUnavailableException(
-        'Owner pet integration is not configured',
-      );
-    }
-
     const query = `
       query InternalPetsByIds($petIds: [ID!]!) {
         internalPetsByIds(petIds: $petIds) {
@@ -102,48 +88,17 @@ export class OwnerPetsClient {
       }
     `;
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          [OWNER_SERVICE_SECRET_HEADER]: secret,
-        },
-        body: JSON.stringify({
-          query,
-          variables: { petIds: uniqueIds },
-        }),
-      });
-
-      if (!response.ok) {
-        this.logger.warn(
-          `Owner backend responded with HTTP ${response.status} while loading pets`,
-        );
-        throw new ServiceUnavailableException(
-          'Unable to load patient data from the Owner system',
-        );
-      }
-
-      const payload = (await response.json()) as OwnerGraphqlResponse;
-      if (payload.errors?.length) {
-        this.logger.warn(
-          `Owner backend GraphQL error while loading pets: ${payload.errors[0]?.message ?? 'unknown error'}`,
-        );
-        throw new ServiceUnavailableException(
-          'Unable to load patient data from the Owner system',
-        );
-      }
-
-      return payload.data?.internalPetsByIds ?? [];
-    } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
-        throw error;
-      }
-      this.logger.warn('Owner backend request failed while loading pets');
-      throw new ServiceUnavailableException(
-        'Unable to load patient data from the Owner system',
-      );
-    }
+    const pets = await requestOwnerGraphql<OwnerCanonicalPet[] | null>({
+      configService: this.configService,
+      logger: this.logger,
+      query,
+      variables: { petIds: uniqueIds },
+      resultKey: 'internalPetsByIds',
+      failureMessage: 'Unable to load patient data from the Owner system',
+      notConfiguredMessage: 'Owner pet integration is not configured',
+      allowNullResult: true,
+    });
+    return pets ?? [];
   }
 
   async registerPetForVet(
@@ -269,80 +224,22 @@ export class OwnerPetsClient {
     );
   }
 
-  private async executeOwnerMutation<T>(
+  private executeOwnerMutation<T>(
     query: string,
     variables: Record<string, unknown>,
     resultKey: keyof NonNullable<OwnerGraphqlResponse['data']>,
     failureMessage: string,
   ): Promise<T> {
-    const url = this.configService.get<string>('owner.graphqlUrl')?.trim();
-    const secret = this.configService.get<string>('owner.serviceSecret')?.trim();
-    if (!url || !secret) {
-      throw new ServiceUnavailableException(
-        'Owner pet integration is not configured',
-      );
-    }
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          [OWNER_SERVICE_SECRET_HEADER]: secret,
-        },
-        body: JSON.stringify({ query, variables }),
-      });
-
-      if (!response.ok) {
-        this.logger.warn(
-          `Owner backend responded with HTTP ${response.status} during mutation`,
-        );
-        throw new ServiceUnavailableException(failureMessage);
-      }
-
-      const payload = (await response.json()) as OwnerGraphqlResponse;
-      if (payload.errors?.length) {
-        const ownerMessage =
-          payload.errors[0]?.message?.trim() || 'unknown error';
-        this.logger.warn(`Owner backend GraphQL error: ${ownerMessage}`);
-        throw new BadGatewayException(
-          this.toOwnerIntegrationUserMessage(ownerMessage, failureMessage),
-        );
-      }
-
-      const result = payload.data?.[resultKey] as T | undefined;
-      if (!result) {
-        throw new ServiceUnavailableException(failureMessage);
-      }
-      return result;
-    } catch (error) {
-      // Keep owner-system errors (e.g. "owner account already exists") so the
-      // clinic user sees why the action was refused.
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      this.logger.warn('Owner backend request failed during mutation');
-      throw new ServiceUnavailableException(failureMessage);
-    }
-  }
-
-  private toOwnerIntegrationUserMessage(
-    ownerMessage: string,
-    fallback: string,
-  ): string {
-    const normalized = ownerMessage.toLowerCase();
-    if (
-      normalized === 'bad request exception' ||
-      normalized.includes('validation failed')
-    ) {
-      return fallback;
-    }
-    if (
-      normalized.includes('unauthorized') ||
-      normalized.includes('internal service')
-    ) {
-      return 'Owner system integration is not configured correctly. Contact support.';
-    }
-    return ownerMessage;
+    // Owner-system errors (e.g. "owner account already exists") reach the
+    // clinic user; see requestOwnerGraphql for the full error contract.
+    return requestOwnerGraphql<T>({
+      configService: this.configService,
+      logger: this.logger,
+      query,
+      variables,
+      resultKey,
+      failureMessage,
+      notConfiguredMessage: 'Owner pet integration is not configured',
+    });
   }
 }
