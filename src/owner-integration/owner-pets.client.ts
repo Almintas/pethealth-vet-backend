@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  HttpException,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -280,7 +281,9 @@ export class OwnerPetsClient {
       }
       return result;
     } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
+      // Keep owner-system errors (e.g. "owner account already exists") so the
+      // clinic user sees why the action was refused.
+      if (error instanceof HttpException) {
         throw error;
       }
       this.logger.warn('Owner backend request failed during mutation');

@@ -13,6 +13,14 @@ if (!profile) {
 }
 
 const now = new Date();
+
+// Demo convenience: the seeded vet must be approved to use the clinic.
+await db
+  .collection('users')
+  .updateOne(
+    { _id: profile.userId },
+    { $set: { approvalStatus: 'APPROVED', updatedAt: now } },
+  );
 let clinic = await db.collection('clinics').findOne({ name: CLINIC_NAME });
 
 if (!clinic) {

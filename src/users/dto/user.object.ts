@@ -1,4 +1,5 @@
 import { Field, ID, ObjectType } from '@nestjs/graphql';
+import { AccountApprovalStatus } from '../../common/enums/account-approval-status.enum';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { VeterinarianProfileObject } from '../../veterinarians/dto/veterinarian-profile.object';
 
@@ -12,6 +13,9 @@ export class UserObject {
 
   @Field(() => UserRole)
   role!: UserRole;
+
+  @Field(() => AccountApprovalStatus)
+  approvalStatus!: AccountApprovalStatus;
 
   @Field()
   createdAt!: Date;

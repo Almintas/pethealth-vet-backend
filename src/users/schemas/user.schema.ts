@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
+import { AccountApprovalStatus } from '../../common/enums/account-approval-status.enum';
 import { UserRole } from '../../common/enums/user-role.enum';
 
 export type UserDocument = HydratedDocument<User>;
@@ -19,6 +20,18 @@ export class User {
     default: UserRole.VETERINARIAN,
   })
   role!: UserRole;
+
+  /**
+   * Accounts without this field (created before approval existed) are treated
+   * as PENDING and must be approved with scripts/approve-veterinarian.mjs.
+   */
+  @Prop({
+    required: true,
+    type: String,
+    enum: AccountApprovalStatus,
+    default: AccountApprovalStatus.PENDING,
+  })
+  approvalStatus!: AccountApprovalStatus;
 
   createdAt!: Date;
   updatedAt!: Date;
