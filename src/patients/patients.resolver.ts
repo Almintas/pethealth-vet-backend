@@ -6,6 +6,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import type { UserDocument } from '../users/schemas/user.schema';
+import { ClaimPatientByShareCodeInput } from './dto/claim-patient-by-share-code.input';
 import { PatientObject } from './dto/patient.object';
 import { RegisterPatientInput } from './dto/register-patient.input';
 import { UpdatePatientInput } from './dto/update-patient.input';
@@ -52,6 +53,27 @@ export class PatientsResolver {
     @Args('input') input: RegisterPatientInput,
   ): Promise<PatientObject> {
     return this.patientsService.registerPatient(user._id.toString(), input);
+  }
+
+  @Mutation(() => PatientObject, {
+    name: 'claimPatientByShareCode',
+    description:
+      "Adds an owner's existing pet to the clinic using the owner's one-time share code",
+  })
+  @UseGuards(GqlAuthGuard, GqlRolesGuard)
+  @Roles(
+    UserRole.VETERINARIAN,
+    UserRole.CLINIC_ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  claimPatientByShareCode(
+    @CurrentUser() user: UserDocument,
+    @Args('input') input: ClaimPatientByShareCodeInput,
+  ): Promise<PatientObject> {
+    return this.patientsService.claimPatientByShareCode(
+      user._id.toString(),
+      input,
+    );
   }
 
   @Mutation(() => PatientObject, { name: 'updatePatient' })

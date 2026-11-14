@@ -31,6 +31,7 @@ type OwnerGraphqlResponse = {
     internalRegisterPetForVet?: OwnerCanonicalPet;
     internalUpdatePetForVet?: OwnerCanonicalPet;
     internalUpdateOwnerProfileForVet?: OwnerCanonicalPet;
+    internalRedeemPetShareCode?: OwnerCanonicalPet;
   };
   errors?: { message: string }[];
 };
@@ -170,6 +171,40 @@ export class OwnerPetsClient {
       { input: payload },
       'internalRegisterPetForVet',
       'Unable to register patient in the Owner system',
+    );
+  }
+
+  /**
+   * Redeems a one-time share code that the owner generated in the Owner
+   * Portal. This is the owner's explicit consent for the clinic to access the
+   * pet; the Owner backend marks the code as used and returns the pet.
+   */
+  async redeemPetShareCode(
+    code: string,
+    vetClinicId: string,
+  ): Promise<OwnerCanonicalPet> {
+    return this.executeOwnerMutation<OwnerCanonicalPet>(
+      `
+        mutation InternalRedeemPetShareCode($code: String!, $vetClinicId: ID!) {
+          internalRedeemPetShareCode(code: $code, vetClinicId: $vetClinicId) {
+            id
+            name
+            species
+            breed
+            gender
+            birthDate
+            owner {
+              id
+              firstName
+              lastName
+              email
+            }
+          }
+        }
+      `,
+      { code, vetClinicId },
+      'internalRedeemPetShareCode',
+      'Unable to verify the share code with the Owner system',
     );
   }
 

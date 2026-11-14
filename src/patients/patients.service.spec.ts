@@ -26,6 +26,7 @@ describe('PatientsService', () => {
     registerPetForVet: jest.fn(),
     updatePetForVet: jest.fn(),
     updateOwnerProfileForVet: jest.fn(),
+    redeemPetShareCode: jest.fn(),
   };
   const veterinariansService = {
     findByUserId: jest.fn(),
@@ -340,6 +341,50 @@ describe('PatientsService', () => {
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(ownerPetsClient.registerPetForVet).not.toHaveBeenCalled();
+  });
+
+  it('claims a patient with an owner share code and grants clinic access', async () => {
+    ownerPetsClient.redeemPetShareCode.mockResolvedValue(ownerPet);
+    clinicPetAccessService.grantActiveAccess.mockResolvedValue({
+      petId,
+      clinicId: clinicA,
+      status: ClinicPetAccessStatus.ACTIVE,
+      grantedAt: new Date(),
+    });
+
+    const patient = await service.claimPatientByShareCode(userId, {
+      clinicId: clinicA.toString(),
+      code: 'ABCD-2345',
+    });
+
+    expect(clinicMembershipsService.assertActiveMembership).toHaveBeenCalledWith(
+      vetProfileId.toString(),
+      clinicA.toString(),
+    );
+    expect(ownerPetsClient.redeemPetShareCode).toHaveBeenCalledWith(
+      'ABCD-2345',
+      clinicA.toString(),
+    );
+    expect(clinicPetAccessService.grantActiveAccess).toHaveBeenCalledWith({
+      clinicId: clinicA.toString(),
+      petId,
+      grantedByUserId: userId,
+    });
+    expect(patient.id).toBe(petId);
+  });
+
+  it('does not redeem a share code for a clinic the vet is not a member of', async () => {
+    clinicMembershipsService.assertActiveMembership.mockRejectedValue(
+      new ForbiddenException('Not a member'),
+    );
+
+    await expect(
+      service.claimPatientByShareCode(userId, {
+        clinicId: clinicB.toString(),
+        code: 'ABCD-2345',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(ownerPetsClient.redeemPetShareCode).not.toHaveBeenCalled();
   });
 
   it('does not expose delete patient operations', async () => {

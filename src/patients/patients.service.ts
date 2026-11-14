@@ -5,6 +5,7 @@ import { ClinicPetAccessService } from '../clinic-pet-access/clinic-pet-access.s
 import { ClinicPetAccessDocument } from '../clinic-pet-access/schemas/clinic-pet-access.schema';
 import { OwnerCanonicalPet, OwnerPetsClient } from '../owner-integration/owner-pets.client';
 import { VeterinariansService } from '../veterinarians/veterinarians.service';
+import { ClaimPatientByShareCodeInput } from './dto/claim-patient-by-share-code.input';
 import { PatientObject } from './dto/patient.object';
 import { RegisterPatientInput } from './dto/register-patient.input';
 import { UpdatePatientInput } from './dto/update-patient.input';
@@ -80,6 +81,48 @@ export class PatientsService {
       gender: input.gender,
       birthDate: this.toOwnerBirthDateIso(input.dateOfBirth),
     });
+
+    let accessRecords: ClinicPetAccessDocument[];
+    try {
+      const access = await this.clinicPetAccessService.grantActiveAccess({
+        clinicId: input.clinicId,
+        petId: ownerPet.id,
+        grantedByUserId: userId,
+      });
+      accessRecords = [access];
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        accessRecords =
+          await this.clinicPetAccessService.assertUserHasActiveAccessToPet(
+            userId,
+            ownerPet.id,
+          );
+      } else {
+        throw error;
+      }
+    }
+
+    return this.mapOwnerPetToPatient(ownerPet, accessRecords);
+  }
+
+  /**
+   * Adds an existing owner's pet to the clinic using the one-time share code
+   * the owner generated in the Owner Portal (owner consent).
+   */
+  async claimPatientByShareCode(
+    userId: string,
+    input: ClaimPatientByShareCodeInput,
+  ): Promise<PatientObject> {
+    const profile = await this.veterinariansService.findByUserId(userId);
+    await this.clinicMembershipsService.assertActiveMembership(
+      profile._id.toString(),
+      input.clinicId,
+    );
+
+    const ownerPet = await this.ownerPetsClient.redeemPetShareCode(
+      input.code,
+      input.clinicId,
+    );
 
     let accessRecords: ClinicPetAccessDocument[];
     try {

@@ -23,9 +23,11 @@ describe('ClinicPetAccessService', () => {
   })) as jest.Mock & {
     findOne: jest.Mock;
     find: jest.Mock;
+    updateMany: jest.Mock;
   };
   accessModel.findOne = jest.fn();
   accessModel.find = jest.fn();
+  accessModel.updateMany = jest.fn();
 
   const clinicMembershipsService = {
     assertActiveMembership: jest.fn(),
@@ -207,5 +209,39 @@ describe('ClinicPetAccessService', () => {
     expect(accessDoc.save).toHaveBeenCalled();
     expect(result.status).toBe(ClinicPetAccessStatus.REVOKED);
     expect(result.revokedAt).toEqual(revokedAt);
+  });
+
+  it('owner revocation marks active access for the pet and clinic as REVOKED', async () => {
+    const clinicId = new Types.ObjectId();
+    accessModel.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 1 } as never),
+    });
+
+    const revoked = await service.revokeAccessForPetByOwner(
+      ' pet-1 ',
+      clinicId.toString(),
+    );
+
+    expect(revoked).toBe(true);
+    expect(accessModel.updateMany).toHaveBeenCalledWith(
+      {
+        petId: 'pet-1',
+        clinicId,
+        status: ClinicPetAccessStatus.ACTIVE,
+      },
+      {
+        $set: {
+          status: ClinicPetAccessStatus.REVOKED,
+          revokedAt: expect.any(Date),
+        },
+      },
+    );
+  });
+
+  it('owner revocation ignores invalid clinic ids', async () => {
+    await expect(
+      service.revokeAccessForPetByOwner('pet-1', 'not-an-id'),
+    ).resolves.toBe(false);
+    expect(accessModel.updateMany).not.toHaveBeenCalled();
   });
 });

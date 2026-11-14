@@ -184,6 +184,52 @@ export class ClinicPetAccessService {
     };
   }
 
+  /** Active clinic grants for a pet, for the owner's "Clinic access" view. */
+  async listActiveAccessForPet(
+    petId: string,
+  ): Promise<{ access: ClinicPetAccessDocument; clinic?: ClinicObject }[]> {
+    const accessRecords = await this.accessModel
+      .find({ petId: petId.trim(), status: ClinicPetAccessStatus.ACTIVE })
+      .sort({ grantedAt: -1 })
+      .exec();
+    const clinicMap = await this.loadClinicMap(
+      accessRecords.map((record) => record.clinicId.toString()),
+    );
+    return accessRecords.map((access) => ({
+      access,
+      clinic: clinicMap.get(access.clinicId.toString()),
+    }));
+  }
+
+  /**
+   * Owner-initiated revocation (called by the Owner backend). Idempotent:
+   * returns false when the clinic had no active access.
+   */
+  async revokeAccessForPetByOwner(
+    petId: string,
+    clinicId: string,
+  ): Promise<boolean> {
+    if (!Types.ObjectId.isValid(clinicId)) {
+      return false;
+    }
+    const result = await this.accessModel
+      .updateMany(
+        {
+          petId: petId.trim(),
+          clinicId: new Types.ObjectId(clinicId),
+          status: ClinicPetAccessStatus.ACTIVE,
+        },
+        {
+          $set: {
+            status: ClinicPetAccessStatus.REVOKED,
+            revokedAt: new Date(),
+          },
+        },
+      )
+      .exec();
+    return result.modifiedCount > 0;
+  }
+
   private async loadClinicMap(
     clinicIds: string[],
   ): Promise<Map<string, ClinicObject>> {

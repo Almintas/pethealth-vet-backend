@@ -16,6 +16,7 @@ import { PatientsModule } from './patients/patients.module';
 import { ClinicsModule } from './clinics/clinics.module';
 import { CommonModule } from './common/common.module';
 import { HealthModule } from './health/health.module';
+import { InternalModule } from './internal/internal.module';
 import { UsersModule } from './users/users.module';
 import { VeterinariansModule } from './veterinarians/veterinarians.module';
 
@@ -55,6 +56,7 @@ import { VeterinariansModule } from './veterinarians/veterinarians.module';
     MedicationsModule,
     VaccinationsModule,
     HealthModule,
+    InternalModule,
   ],
 })
 export class AppModule {}
