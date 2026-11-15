@@ -28,6 +28,30 @@ export interface CreateClinicServiceInput {
   address?: string;
 }
 
+const TRANSACTION_UNSUPPORTED_PATTERN =
+  /Transaction numbers are only allowed on a replica set member|replica set|does not support retryable writes|Transactions are not supported/i;
+
+/**
+ * True when MongoDB runs as a standalone server (typical local setup), where
+ * transactions are unavailable. Newer drivers report this as "does not support
+ * retryable writes" and keep the original server error in `originalError`, so
+ * the whole error chain is checked.
+ */
+export function isTransactionUnsupportedError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current instanceof Error; depth += 1) {
+    if (TRANSACTION_UNSUPPORTED_PATTERN.test(current.message)) {
+      return true;
+    }
+    const chained = current as Error & {
+      originalError?: unknown;
+      cause?: unknown;
+    };
+    current = chained.originalError ?? chained.cause;
+  }
+  return false;
+}
+
 @Injectable()
 export class ClinicsService {
   constructor(
@@ -162,11 +186,7 @@ export class ClinicsService {
       }
       return createdClinic;
     } catch (error) {
-      const transactionUnsupported =
-        error instanceof Error &&
-        /Transaction numbers are only allowed on a replica set member|replica set/i.test(
-          error.message,
-        );
+      const transactionUnsupported = isTransactionUnsupportedError(error);
 
       if (!transactionUnsupported) {
         throw error;
