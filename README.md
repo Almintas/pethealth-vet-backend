@@ -27,6 +27,11 @@ accounts that have been claimed.
 are written to `audit_events` (`src/audit/`), including owner revocations. The
 owner API reads them through `internalAuditEventsForPet`.
 
+**Clinic team.** Memberships carry a clinic role (`ADMIN`, `VETERINARIAN`,
+`RECEPTIONIST`; legacy memberships without one count as `ADMIN`). Admins invite
+by email (`src/clinic-team/`): 7-day single-use links, only the token hash is
+stored.
+
 ## Environment variables
 
 Copy `.env.example` to `.env`. Outside production every variable has a working
@@ -41,6 +46,9 @@ development default.
 | `JWT_EXPIRES_IN` | | Token lifetime, default `7d`. |
 | `OWNER_GRAPHQL_URL` | yes | Owner API GraphQL URL, default `http://localhost:3000/graphql`. |
 | `OWNER_SERVICE_SECRET` | yes (32+ chars) | Shared secret with the owner API (must match its `OWNER_SERVICE_SECRET`). |
+| `VET_FRONTEND_URL` | yes | Clinic app URL used in team invitation links, default `http://localhost:5174`. |
+| `RESEND_API_KEY` | | Sends team invitation emails through Resend. Optional. |
+| `RESEND_FROM_EMAIL` | | Sender address for invitation emails, e.g. `PetHealth Vet <team@yourdomain>`. |
 | `CORS_ORIGIN` | yes | Comma-separated browser origins. Defaults to the clinic app on `localhost:5174` in development. |
 
 ## Scripts
@@ -168,12 +176,19 @@ command if your database differs, e.g.
   The owner gets an activation email. Without `RESEND_API_KEY`, the owner API
   prints the activation link in its console instead (development only); open
   it to set a password at `/activate-account`.
+- **Clinic team**: on *My clinic*, a clinic administrator invites colleagues by
+  email (veterinarian, receptionist or administrator). The invitee opens the
+  link (`/invite`) and joins with an existing account or creates one;
+  receptionists are approved at once, vets still need PetHealth approval.
+  Without Resend configured, the link is printed in the clinic API log and
+  shown to the admin to copy.
 - **Activity log**: every view (at most once per 30 minutes per person) and
   every change a clinic makes is recorded. The owner sees it on the pet page
   under *Activity log*.
 - **Existing owner shares a pet**: in the owner portal open a pet →
   *Clinic access* → *Create code for clinic*. In the clinic app use
   *Add by owner code*. Codes are single-use and valid for 15 minutes; the
-  owner can revoke access at any time.
+  owner gets an email saying which clinic now has access and can revoke it
+  at any time.
 - Records, vaccinations, medications and appointments added by the clinic
   appear in the owner portal.
