@@ -27,6 +27,12 @@ accounts that have been claimed.
 are written to `audit_events` (`src/audit/`), including owner revocations. The
 owner API reads them through `internalAuditEventsForPet`.
 
+**Security.** Login, registration, share-code claims, invitations and the
+two-factor step are rate-limited per client IP (and per account for login;
+see `src/common/rate-limit/rate-limit.rules.ts`). Accounts can turn on
+two-factor sign-in with an authenticator app in *Profile* (`src/two-factor/`);
+platform admin approvals are recorded in `admin_actions`.
+
 **Clinic team.** Memberships carry a clinic role (`ADMIN`, `VETERINARIAN`,
 `RECEPTIONIST`; legacy memberships without one count as `ADMIN`). Admins invite
 by email (`src/clinic-team/`): 7-day single-use links, only the token hash is
@@ -46,6 +52,8 @@ development default.
 | `JWT_EXPIRES_IN` | | Token lifetime, default `7d`. |
 | `OWNER_GRAPHQL_URL` | yes | Owner API GraphQL URL, default `http://localhost:3000/graphql`. |
 | `OWNER_SERVICE_SECRET` | yes (32+ chars) | Shared secret with the owner API (must match its `OWNER_SERVICE_SECRET`). |
+| `TWO_FACTOR_ENCRYPTION_KEY` | recommended | Encrypts authenticator secrets for two-factor sign-in. Defaults to `JWT_SECRET`; set it once and never change it, or users with 2FA can no longer sign in. |
+| `TRUST_PROXY` | | Proxy hops in front of the API (default `1` in production) so rate limits see real client IPs. |
 | `VET_FRONTEND_URL` | yes | Clinic app URL used in team invitation links, default `http://localhost:5174`. |
 | `RESEND_API_KEY` | | Sends team invitation emails through Resend. Optional. |
 | `RESEND_FROM_EMAIL` | | Sender address for invitation emails, e.g. `PetHealth Vet <team@yourdomain>`. |
