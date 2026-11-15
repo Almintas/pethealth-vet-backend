@@ -1,3 +1,5 @@
+import { AuditService } from '../audit/audit.service';
+import { AuditAction, AuditEntityType } from '../audit/enums/audit.enums';
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
@@ -15,17 +17,16 @@ import { MedicationsService } from './medications.service';
 
 @Resolver()
 export class MedicationsResolver {
-  constructor(private readonly medicationsService: MedicationsService) {}
+  constructor(
+    private readonly medicationsService: MedicationsService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Query(() => PatientMedicationsPageObject, {
     name: 'patientMedicationsPage',
   })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
   patientMedicationsPage(
     @CurrentUser() user: UserDocument,
     @Args('patientId', { type: () => ID }) patientId: string,
@@ -46,11 +47,7 @@ export class MedicationsResolver {
 
   @Query(() => VetMedicationObject, { name: 'vetMedication' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
   vetMedication(
     @CurrentUser() user: UserDocument,
     @Args('id', { type: () => ID }) id: string,
@@ -60,37 +57,48 @@ export class MedicationsResolver {
 
   @Mutation(() => VetMedicationObject, { name: 'createVetMedication' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
-  createVetMedication(
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
+  async createVetMedication(
     @CurrentUser() user: UserDocument,
     @Args('input') input: CreateVetMedicationInput,
   ): Promise<VetMedicationObject> {
-    return this.medicationsService.createMedication(
+    const medication = await this.medicationsService.createMedication(
       user._id.toString(),
       input,
     );
+    await this.auditService.recordClinicActivity({
+      actorUserId: user._id.toString(),
+      petId: medication.petId,
+      clinicId: input.clinicId,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.MEDICATION,
+      entityId: medication.id,
+      summary: medication.name,
+    });
+    return medication;
   }
 
   @Mutation(() => VetMedicationObject, { name: 'updateVetMedication' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
-  updateVetMedication(
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
+  async updateVetMedication(
     @CurrentUser() user: UserDocument,
     @Args('id', { type: () => ID }) id: string,
     @Args('input') input: UpdateVetMedicationInput,
   ): Promise<VetMedicationObject> {
-    return this.medicationsService.updateMedication(
+    const medication = await this.medicationsService.updateMedication(
       user._id.toString(),
       id,
       input,
     );
+    await this.auditService.recordClinicActivity({
+      actorUserId: user._id.toString(),
+      petId: medication.petId,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.MEDICATION,
+      entityId: medication.id,
+      summary: medication.name,
+    });
+    return medication;
   }
 }

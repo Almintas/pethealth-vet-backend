@@ -1,3 +1,5 @@
+import { AuditService } from '../audit/audit.service';
+import { AuditAction, AuditEntityType } from '../audit/enums/audit.enums';
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
@@ -15,17 +17,16 @@ import { MedicalRecordsService } from './medical-records.service';
 
 @Resolver()
 export class MedicalRecordsResolver {
-  constructor(private readonly medicalRecordsService: MedicalRecordsService) {}
+  constructor(
+    private readonly medicalRecordsService: MedicalRecordsService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Query(() => PatientMedicalRecordsPageObject, {
     name: 'patientMedicalRecordsPage',
   })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
   patientMedicalRecordsPage(
     @CurrentUser() user: UserDocument,
     @Args('patientId', { type: () => ID }) patientId: string,
@@ -48,11 +49,7 @@ export class MedicalRecordsResolver {
 
   @Query(() => VetMedicalRecordObject, { name: 'vetMedicalRecord' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
   vetMedicalRecord(
     @CurrentUser() user: UserDocument,
     @Args('id', { type: () => ID }) id: string,
@@ -65,37 +62,48 @@ export class MedicalRecordsResolver {
 
   @Mutation(() => VetMedicalRecordObject, { name: 'createVetMedicalRecord' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
-  createVetMedicalRecord(
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
+  async createVetMedicalRecord(
     @CurrentUser() user: UserDocument,
     @Args('input') input: CreateVetMedicalRecordInput,
   ): Promise<VetMedicalRecordObject> {
-    return this.medicalRecordsService.createMedicalRecord(
+    const record = await this.medicalRecordsService.createMedicalRecord(
       user._id.toString(),
       input,
     );
+    await this.auditService.recordClinicActivity({
+      actorUserId: user._id.toString(),
+      petId: record.petId,
+      clinicId: input.clinicId,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.MEDICAL_RECORD,
+      entityId: record.id,
+      summary: record.title,
+    });
+    return record;
   }
 
   @Mutation(() => VetMedicalRecordObject, { name: 'updateVetMedicalRecord' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
-  updateVetMedicalRecord(
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
+  async updateVetMedicalRecord(
     @CurrentUser() user: UserDocument,
     @Args('id', { type: () => ID }) id: string,
     @Args('input') input: UpdateVetMedicalRecordInput,
   ): Promise<VetMedicalRecordObject> {
-    return this.medicalRecordsService.updateMedicalRecord(
+    const record = await this.medicalRecordsService.updateMedicalRecord(
       user._id.toString(),
       id,
       input,
     );
+    await this.auditService.recordClinicActivity({
+      actorUserId: user._id.toString(),
+      petId: record.petId,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.MEDICAL_RECORD,
+      entityId: record.id,
+      summary: record.title,
+    });
+    return record;
   }
 }

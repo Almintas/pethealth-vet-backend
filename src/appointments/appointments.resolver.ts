@@ -1,3 +1,5 @@
+import { AuditService } from '../audit/audit.service';
+import { AuditAction, AuditEntityType } from '../audit/enums/audit.enums';
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
@@ -14,34 +16,38 @@ import { UpdateVetAppointmentInput } from './dto/update-vet-appointment.input';
 
 @Resolver()
 export class AppointmentsResolver {
-  constructor(private readonly appointmentsService: AppointmentsService) {}
+  constructor(
+    private readonly appointmentsService: AppointmentsService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Query(() => [VetAppointmentObject], { name: 'myAppointments' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
   myAppointments(
     @CurrentUser() user: UserDocument,
-    @Args('query', { type: () => AppointmentsScheduleQueryInput, nullable: true })
+    @Args('query', {
+      type: () => AppointmentsScheduleQueryInput,
+      nullable: true,
+    })
     query?: AppointmentsScheduleQueryInput,
   ): Promise<VetAppointmentObject[]> {
-    return this.appointmentsService.getMyAppointments(user._id.toString(), query);
+    return this.appointmentsService.getMyAppointments(
+      user._id.toString(),
+      query,
+    );
   }
 
   @Query(() => [VetAppointmentObject], { name: 'patientAppointments' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
   patientAppointments(
     @CurrentUser() user: UserDocument,
     @Args('patientId', { type: () => ID }) patientId: string,
-    @Args('query', { type: () => AppointmentsScheduleQueryInput, nullable: true })
+    @Args('query', {
+      type: () => AppointmentsScheduleQueryInput,
+      nullable: true,
+    })
     query?: AppointmentsScheduleQueryInput,
   ): Promise<VetAppointmentObject[]> {
     return this.appointmentsService.getPatientAppointments(
@@ -53,11 +59,7 @@ export class AppointmentsResolver {
 
   @Query(() => VetAppointmentObject, { name: 'vetAppointment' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
   vetAppointment(
     @CurrentUser() user: UserDocument,
     @Args('id', { type: () => ID }) id: string,
@@ -67,51 +69,72 @@ export class AppointmentsResolver {
 
   @Mutation(() => VetAppointmentObject, { name: 'createVetAppointment' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
-  createVetAppointment(
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
+  async createVetAppointment(
     @CurrentUser() user: UserDocument,
     @Args('input') input: CreateVetAppointmentInput,
   ): Promise<VetAppointmentObject> {
-    return this.appointmentsService.createAppointment(
+    const appointment = await this.appointmentsService.createAppointment(
       user._id.toString(),
       input,
     );
+    await this.auditService.recordClinicActivity({
+      actorUserId: user._id.toString(),
+      petId: appointment.petId,
+      clinicId: input.clinicId,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.APPOINTMENT,
+      entityId: appointment.id,
+      summary: appointment.reason ?? appointment.type,
+    });
+    return appointment;
   }
 
   @Mutation(() => VetAppointmentObject, { name: 'updateVetAppointment' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
-  updateVetAppointment(
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
+  async updateVetAppointment(
     @CurrentUser() user: UserDocument,
     @Args('id', { type: () => ID }) id: string,
     @Args('input') input: UpdateVetAppointmentInput,
   ): Promise<VetAppointmentObject> {
-    return this.appointmentsService.updateAppointment(
+    const appointment = await this.appointmentsService.updateAppointment(
       user._id.toString(),
       id,
       input,
     );
+    await this.auditService.recordClinicActivity({
+      actorUserId: user._id.toString(),
+      petId: appointment.petId,
+      clinicId: appointment.clinicId,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.APPOINTMENT,
+      entityId: appointment.id,
+      summary: appointment.reason ?? appointment.type,
+    });
+    return appointment;
   }
 
   @Mutation(() => VetAppointmentObject, { name: 'cancelVetAppointment' })
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
-  @Roles(
-    UserRole.VETERINARIAN,
-    UserRole.CLINIC_ADMIN,
-    UserRole.RECEPTIONIST,
-  )
-  cancelVetAppointment(
+  @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
+  async cancelVetAppointment(
     @CurrentUser() user: UserDocument,
     @Args('id', { type: () => ID }) id: string,
   ): Promise<VetAppointmentObject> {
-    return this.appointmentsService.cancelAppointment(user._id.toString(), id);
+    const appointment = await this.appointmentsService.cancelAppointment(
+      user._id.toString(),
+      id,
+    );
+    await this.auditService.recordClinicActivity({
+      actorUserId: user._id.toString(),
+      petId: appointment.petId,
+      clinicId: appointment.clinicId,
+      action: AuditAction.CANCELLED,
+      entityType: AuditEntityType.APPOINTMENT,
+      entityId: appointment.id,
+      summary: appointment.reason ?? appointment.type,
+    });
+    return appointment;
   }
 }
