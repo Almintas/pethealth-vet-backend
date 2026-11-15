@@ -26,13 +26,26 @@ describe('AdminService', () => {
     licenseNumber: 'VET-123',
   };
 
-  const userModel = { find: jest.fn(), findOneAndUpdate: jest.fn() };
+  const userModel = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+  };
+  const adminActionModel = { create: jest.fn() };
+  const admin = {
+    id: new Types.ObjectId().toString(),
+    email: 'admin@pethealth.lt',
+  };
   const profileModel = { find: jest.fn(), findOne: jest.fn() };
   let service: AdminService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new AdminService(userModel as never, profileModel as never);
+    service = new AdminService(
+      userModel as never,
+      profileModel as never,
+      adminActionModel as never,
+    );
   });
 
   function mockUserList(users: unknown[]) {
@@ -60,6 +73,8 @@ describe('AdminService', () => {
         lastName: 'Vet',
         licenseNumber: 'VET-123',
         registeredAt: createdAt,
+        decidedBy: null,
+        decidedAt: null,
       },
     ]);
   });
@@ -84,39 +99,63 @@ describe('AdminService', () => {
     expect(result[0]?.licenseNumber).toBeNull();
   });
 
-  it('approves an account', async () => {
+  it('approves an account and records who did it', async () => {
+    userModel.findOne.mockReturnValue(execOf(user));
     userModel.findOneAndUpdate.mockReturnValue(
-      execOf({ ...user, approvalStatus: AccountApprovalStatus.APPROVED }),
+      execOf({
+        ...user,
+        approvalStatus: AccountApprovalStatus.APPROVED,
+        approvalDecidedBy: admin.email,
+        approvalDecidedAt: new Date('2026-11-15T19:00:00.000Z'),
+      }),
     );
     profileModel.findOne.mockReturnValue(execOf(profile));
 
     const result = await service.setApprovalStatus(
+      admin,
       userId.toString(),
       AccountApprovalStatus.APPROVED,
     );
 
     expect(userModel.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: userId, role: { $ne: UserRole.PLATFORM_ADMIN } },
-      { $set: { approvalStatus: AccountApprovalStatus.APPROVED } },
+      {
+        $set: expect.objectContaining({
+          approvalStatus: AccountApprovalStatus.APPROVED,
+          approvalDecidedBy: admin.email,
+        }),
+      },
       { new: true },
     );
+    expect(adminActionModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminEmail: admin.email,
+        targetEmail: 'vet@clinic.lt',
+        previousStatus: AccountApprovalStatus.PENDING,
+        newStatus: AccountApprovalStatus.APPROVED,
+      }),
+    );
     expect(result.approvalStatus).toBe(AccountApprovalStatus.APPROVED);
+    expect(result.decidedBy).toBe(admin.email);
   });
 
   it('rejects an invalid id', async () => {
     await expect(
-      service.setApprovalStatus('nope', AccountApprovalStatus.REJECTED),
+      service.setApprovalStatus(admin, 'nope', AccountApprovalStatus.REJECTED),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('cannot change platform admins or unknown accounts', async () => {
-    userModel.findOneAndUpdate.mockReturnValue(execOf(null));
+    userModel.findOne.mockReturnValue(execOf(null));
 
     await expect(
       service.setApprovalStatus(
+        admin,
         userId.toString(),
         AccountApprovalStatus.REJECTED,
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+    expect(userModel.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(adminActionModel.create).not.toHaveBeenCalled();
   });
 });

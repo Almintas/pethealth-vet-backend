@@ -30,4 +30,13 @@ export class AdminVeterinarianObject {
 
   @Field()
   registeredAt!: Date;
+
+  @Field(() => String, {
+    nullable: true,
+    description: 'Email of the admin (or "operator script") who last decided',
+  })
+  decidedBy?: string | null;
+
+  @Field(() => Date, { nullable: true })
+  decidedAt?: Date | null;
 }

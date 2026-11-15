@@ -9,6 +9,7 @@ import { envValidationSchema } from './config/env.validation';
 import { AdminModule } from './admin/admin.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 import { ClinicTeamModule } from './clinic-team/clinic-team.module';
 import { ClinicPetAccessModule } from './clinic-pet-access/clinic-pet-access.module';
 import { AppointmentsModule } from './appointments/appointments.module';
@@ -48,6 +49,7 @@ import { VeterinariansModule } from './veterinarians/veterinarians.module';
       context: ({ req }: { req: unknown }) => ({ req }),
     }),
     CommonModule,
+    RateLimitModule,
     UsersModule,
     AuthModule,
     VeterinariansModule,

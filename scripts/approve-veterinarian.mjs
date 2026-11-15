@@ -58,12 +58,17 @@ try {
     );
   } else {
     const status = reject ? 'REJECTED' : 'APPROVED';
-    const result = await db
-      .collection('users')
-      .updateOne(
-        { email },
-        { $set: { approvalStatus: status, updatedAt: new Date() } },
-      );
+    const result = await db.collection('users').updateOne(
+      { email },
+      {
+        $set: {
+          approvalStatus: status,
+          approvalDecidedBy: 'operator script',
+          approvalDecidedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      },
+    );
     if (result.matchedCount === 0) {
       console.error(`No vet account found for ${email}`);
       process.exitCode = 1;

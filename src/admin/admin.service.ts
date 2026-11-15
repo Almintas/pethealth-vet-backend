@@ -13,6 +13,10 @@ import {
   VeterinarianProfileDocument,
 } from '../veterinarians/schemas/veterinarian-profile.schema';
 import { AdminVeterinarianObject } from './dto/admin-veterinarian.object';
+import {
+  AdminAction,
+  AdminActionDocument,
+} from './schemas/admin-action.schema';
 
 export const MAX_ADMIN_LIST_SIZE = 500;
 
@@ -22,6 +26,8 @@ export class AdminService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(VeterinarianProfile.name)
     private readonly profileModel: Model<VeterinarianProfileDocument>,
+    @InjectModel(AdminAction.name)
+    private readonly adminActionModel: Model<AdminActionDocument>,
   ) {}
 
   /**
@@ -61,7 +67,12 @@ export class AdminService {
     );
   }
 
+  /**
+   * Approves or rejects a vet-side account and records who did it, both on
+   * the account (latest decision) and in the admin_actions history.
+   */
   async setApprovalStatus(
+    admin: { id: string; email: string },
     userId: string,
     status: AccountApprovalStatus.APPROVED | AccountApprovalStatus.REJECTED,
   ): Promise<AdminVeterinarianObject> {
@@ -69,19 +80,40 @@ export class AdminService {
       throw new BadRequestException('Invalid user id');
     }
 
+    const filter = {
+      _id: new Types.ObjectId(userId),
+      role: { $ne: UserRole.PLATFORM_ADMIN },
+    };
+    const previous = await this.userModel.findOne(filter).exec();
+    if (!previous) {
+      throw new NotFoundException('Veterinarian account not found');
+    }
+
     const user = await this.userModel
       .findOneAndUpdate(
+        filter,
         {
-          _id: new Types.ObjectId(userId),
-          role: { $ne: UserRole.PLATFORM_ADMIN },
+          $set: {
+            approvalStatus: status,
+            approvalDecidedBy: admin.email,
+            approvalDecidedAt: new Date(),
+          },
         },
-        { $set: { approvalStatus: status } },
         { new: true },
       )
       .exec();
     if (!user) {
       throw new NotFoundException('Veterinarian account not found');
     }
+
+    await this.adminActionModel.create({
+      adminUserId: new Types.ObjectId(admin.id),
+      adminEmail: admin.email,
+      targetUserId: user._id,
+      targetEmail: user.email,
+      previousStatus: previous.approvalStatus ?? AccountApprovalStatus.PENDING,
+      newStatus: status,
+    });
 
     const profile = await this.profileModel
       .findOne({ userId: user._id })
@@ -102,6 +134,8 @@ export class AdminService {
       lastName: profile?.lastName ?? null,
       licenseNumber: profile?.licenseNumber ?? null,
       registeredAt: user.createdAt,
+      decidedBy: user.approvalDecidedBy ?? null,
+      decidedAt: user.approvalDecidedAt ?? null,
     };
   }
 }

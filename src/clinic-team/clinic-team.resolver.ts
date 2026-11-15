@@ -1,3 +1,5 @@
+import { RateLimit } from '../common/rate-limit/rate-limit.decorator';
+import { RATE_LIMITS } from '../common/rate-limit/rate-limit.rules';
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { AuthPayload } from '../auth/dto/auth-payload.object';
@@ -61,6 +63,7 @@ export class ClinicTeamResolver {
     description:
       'Email an invitation to join the clinic (clinic administrators only)',
   })
+  @RateLimit(RATE_LIMITS.invite)
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
   @Roles(...CLINIC_STAFF_ROLES)
   inviteClinicMember(
@@ -103,6 +106,7 @@ export class ClinicTeamResolver {
     description:
       'Public: what an invitation link is for, so the invite page can explain it',
   })
+  @RateLimit(RATE_LIMITS.invitationPreview)
   clinicInvitationPreview(
     @Args('token') token: string,
   ): Promise<ClinicInvitationPreviewObject> {
@@ -114,6 +118,7 @@ export class ClinicTeamResolver {
     description:
       'Join the clinic with the signed-in account (email must match)',
   })
+  @RateLimit(RATE_LIMITS.invitationAccept)
   @UseGuards(GqlAuthGuard)
   acceptClinicInvitation(
     @CurrentUser() user: UserDocument,
@@ -126,6 +131,7 @@ export class ClinicTeamResolver {
     name: 'registerWithInvitation',
     description: 'Create an account from an invitation and join the clinic',
   })
+  @RateLimit(RATE_LIMITS.invitationRegister)
   registerWithInvitation(
     @Args('input') input: RegisterWithInvitationInput,
   ): Promise<AuthPayload> {

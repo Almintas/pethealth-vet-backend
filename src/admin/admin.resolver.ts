@@ -1,5 +1,7 @@
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { UserDocument } from '../users/schemas/user.schema';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 import { GqlRolesGuard } from '../auth/guards/gql-roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -28,9 +30,11 @@ export class AdminResolver {
 
   @Mutation(() => AdminVeterinarianObject, { name: 'approveVeterinarian' })
   approveVeterinarian(
+    @CurrentUser() admin: UserDocument,
     @Args('userId', { type: () => ID }) userId: string,
   ): Promise<AdminVeterinarianObject> {
     return this.adminService.setApprovalStatus(
+      { id: admin._id.toString(), email: admin.email },
       userId,
       AccountApprovalStatus.APPROVED,
     );
@@ -38,9 +42,11 @@ export class AdminResolver {
 
   @Mutation(() => AdminVeterinarianObject, { name: 'rejectVeterinarian' })
   rejectVeterinarian(
+    @CurrentUser() admin: UserDocument,
     @Args('userId', { type: () => ID }) userId: string,
   ): Promise<AdminVeterinarianObject> {
     return this.adminService.setApprovalStatus(
+      { id: admin._id.toString(), email: admin.email },
       userId,
       AccountApprovalStatus.REJECTED,
     );

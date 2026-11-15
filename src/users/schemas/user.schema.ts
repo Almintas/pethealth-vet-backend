@@ -33,6 +33,13 @@ export class User {
   })
   approvalStatus!: AccountApprovalStatus;
 
+  /** Who last approved/rejected the account (email snapshot), and when. */
+  @Prop({ type: String, default: null })
+  approvalDecidedBy?: string | null;
+
+  @Prop({ type: Date, default: null })
+  approvalDecidedAt?: Date | null;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

@@ -1,6 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 /* Vet frontend runs on 5174 so it can run next to the owner portal (5173). */
@@ -12,13 +13,21 @@ const DEV_CORS_ORIGINS = [
 ];
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const configService = app.get(ConfigService);
   const nodeEnv = configService.get<string>('nodeEnv') ?? 'development';
+
+  // Behind Railway's proxy req.ip must come from X-Forwarded-For, otherwise
+  // every client shares one rate-limit bucket. TRUST_PROXY overrides
+  // (number of proxy hops, or "false").
+  app.set('trust proxy', resolveTrustProxy(process.env.TRUST_PROXY, nodeEnv));
   const corsOrigin = process.env.CORS_ORIGIN?.trim();
   const corsOrigins = corsOrigin
-    ? corsOrigin.split(',').map((origin) => origin.trim()).filter(Boolean)
+    ? corsOrigin
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean)
     : nodeEnv === 'production'
       ? []
       : DEV_CORS_ORIGINS;
@@ -43,4 +52,22 @@ async function bootstrap() {
   const port = configService.get<number>('port') ?? 3001;
   await app.listen(port);
 }
+function resolveTrustProxy(
+  value: string | undefined,
+  nodeEnv: string,
+): number | boolean {
+  const raw = value?.trim().toLowerCase();
+  if (raw === 'false' || raw === '0') {
+    return false;
+  }
+  if (raw === 'true') {
+    return true;
+  }
+  const hops = Number(raw);
+  if (raw && Number.isInteger(hops) && hops > 0) {
+    return hops;
+  }
+  return nodeEnv === 'production' ? 1 : false;
+}
+
 void bootstrap();

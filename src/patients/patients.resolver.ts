@@ -1,3 +1,5 @@
+import { RateLimit } from '../common/rate-limit/rate-limit.decorator';
+import { RATE_LIMITS } from '../common/rate-limit/rate-limit.rules';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction, AuditEntityType } from '../audit/enums/audit.enums';
 import { UseGuards } from '@nestjs/common';
@@ -77,6 +79,7 @@ export class PatientsResolver {
     description:
       "Adds an owner's existing pet to the clinic using the owner's one-time share code",
   })
+  @RateLimit(RATE_LIMITS.claimByCode)
   @UseGuards(GqlAuthGuard, GqlRolesGuard)
   @Roles(UserRole.VETERINARIAN, UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)
   async claimPatientByShareCode(
