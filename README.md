@@ -52,8 +52,8 @@ development default.
 | `node scripts/seed-demo-clinic.mjs` | Create the demo clinic for the first registered vet (see below). |
 | `node scripts/probe-owner-integration.mjs` | Integration smoke test: registers a test pet (owner `probe-integration@test.pethealth`) through the owner API. **Writes data** — local development only. |
 
-The test scripts set `NODE_OPTIONS=--experimental-vm-modules` (NestJS 12 ships
-as ES modules); on Windows run them from Git Bash or WSL.
+The test scripts run Jest with `--experimental-vm-modules` because NestJS 12
+ships as ES modules.
 
 CI (`.github/workflows/vet-backend-ci.yml`) lints, runs unit and e2e tests and
 builds on every push and pull request to `dev`.
