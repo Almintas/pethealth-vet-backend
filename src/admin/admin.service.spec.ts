@@ -1,0 +1,122 @@
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Types } from 'mongoose';
+import { AccountApprovalStatus } from '../common/enums/account-approval-status.enum';
+import { UserRole } from '../common/enums/user-role.enum';
+import { AdminService } from './admin.service';
+
+const execOf = (value: unknown) => ({
+  exec: jest.fn<() => Promise<unknown>>().mockResolvedValue(value),
+});
+
+describe('AdminService', () => {
+  const userId = new Types.ObjectId();
+  const createdAt = new Date('2026-11-01T10:00:00.000Z');
+  const user = {
+    _id: userId,
+    email: 'vet@clinic.lt',
+    role: UserRole.VETERINARIAN,
+    approvalStatus: AccountApprovalStatus.PENDING,
+    createdAt,
+  };
+  const profile = {
+    userId,
+    firstName: 'Ona',
+    lastName: 'Vet',
+    licenseNumber: 'VET-123',
+  };
+
+  const userModel = { find: jest.fn(), findOneAndUpdate: jest.fn() };
+  const profileModel = { find: jest.fn(), findOne: jest.fn() };
+  let service: AdminService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new AdminService(userModel as never, profileModel as never);
+  });
+
+  function mockUserList(users: unknown[]) {
+    const limit = jest.fn().mockReturnValue(execOf(users));
+    const sort = jest.fn().mockReturnValue({ limit });
+    userModel.find.mockReturnValue({ sort });
+  }
+
+  it('lists accounts with their licence numbers, excluding platform admins', async () => {
+    mockUserList([user]);
+    profileModel.find.mockReturnValue(execOf([profile]));
+
+    const result = await service.listVeterinarians();
+
+    expect(userModel.find).toHaveBeenCalledWith({
+      role: { $ne: UserRole.PLATFORM_ADMIN },
+    });
+    expect(result).toEqual([
+      {
+        userId: userId.toString(),
+        email: 'vet@clinic.lt',
+        role: UserRole.VETERINARIAN,
+        approvalStatus: AccountApprovalStatus.PENDING,
+        firstName: 'Ona',
+        lastName: 'Vet',
+        licenseNumber: 'VET-123',
+        registeredAt: createdAt,
+      },
+    ]);
+  });
+
+  it('treats legacy accounts without a status as pending', async () => {
+    mockUserList([{ ...user, approvalStatus: undefined }]);
+    profileModel.find.mockReturnValue(execOf([]));
+
+    const result = await service.listVeterinarians(
+      AccountApprovalStatus.PENDING,
+    );
+
+    expect(userModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        $or: [
+          { approvalStatus: AccountApprovalStatus.PENDING },
+          { approvalStatus: { $exists: false } },
+        ],
+      }),
+    );
+    expect(result[0]?.approvalStatus).toBe(AccountApprovalStatus.PENDING);
+    expect(result[0]?.licenseNumber).toBeNull();
+  });
+
+  it('approves an account', async () => {
+    userModel.findOneAndUpdate.mockReturnValue(
+      execOf({ ...user, approvalStatus: AccountApprovalStatus.APPROVED }),
+    );
+    profileModel.findOne.mockReturnValue(execOf(profile));
+
+    const result = await service.setApprovalStatus(
+      userId.toString(),
+      AccountApprovalStatus.APPROVED,
+    );
+
+    expect(userModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: userId, role: { $ne: UserRole.PLATFORM_ADMIN } },
+      { $set: { approvalStatus: AccountApprovalStatus.APPROVED } },
+      { new: true },
+    );
+    expect(result.approvalStatus).toBe(AccountApprovalStatus.APPROVED);
+  });
+
+  it('rejects an invalid id', async () => {
+    await expect(
+      service.setApprovalStatus('nope', AccountApprovalStatus.REJECTED),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('cannot change platform admins or unknown accounts', async () => {
+    userModel.findOneAndUpdate.mockReturnValue(execOf(null));
+
+    await expect(
+      service.setApprovalStatus(
+        userId.toString(),
+        AccountApprovalStatus.REJECTED,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});

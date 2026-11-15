@@ -1,3 +1,5 @@
+import { AuditService } from '../audit/audit.service';
+import { AuditAction, AuditEntityType } from '../audit/enums/audit.enums';
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
@@ -8,7 +10,10 @@ import { ClinicPetAccessObject } from './dto/clinic-pet-access.object';
 
 @Resolver()
 export class ClinicPetAccessResolver {
-  constructor(private readonly clinicPetAccessService: ClinicPetAccessService) {}
+  constructor(
+    private readonly clinicPetAccessService: ClinicPetAccessService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Query(() => [ClinicPetAccessObject], { name: 'myPatientAccess' })
   @UseGuards(GqlAuthGuard)
@@ -20,15 +25,24 @@ export class ClinicPetAccessResolver {
 
   @Mutation(() => ClinicPetAccessObject)
   @UseGuards(GqlAuthGuard)
-  revokePatientAccess(
+  async revokePatientAccess(
     @CurrentUser() user: UserDocument,
     @Args('clinicId', { type: () => ID }) clinicId: string,
     @Args('petId') petId: string,
   ): Promise<ClinicPetAccessObject> {
-    return this.clinicPetAccessService.revokeAccessForUser(
+    const access = await this.clinicPetAccessService.revokeAccessForUser(
       user._id.toString(),
       clinicId,
       petId,
     );
+    await this.auditService.recordClinicActivity({
+      actorUserId: user._id.toString(),
+      petId,
+      clinicId,
+      action: AuditAction.ACCESS_REVOKED,
+      entityType: AuditEntityType.PATIENT,
+      entityId: petId,
+    });
+    return access;
   }
 }

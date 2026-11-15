@@ -7,4 +7,8 @@ describe('UserRole', () => {
     expect(UserRole.CLINIC_ADMIN).toBe('CLINIC_ADMIN');
     expect(UserRole.RECEPTIONIST).toBe('RECEPTIONIST');
   });
+
+  it('includes the platform admin role', () => {
+    expect(UserRole.PLATFORM_ADMIN).toBe('PLATFORM_ADMIN');
+  });
 });

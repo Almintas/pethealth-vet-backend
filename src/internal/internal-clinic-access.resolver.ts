@@ -1,5 +1,7 @@
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '../audit/enums/audit.enums';
 import { ClinicPetAccessService } from '../clinic-pet-access/clinic-pet-access.service';
 import { InternalClinicAccessObject } from './dto/internal-clinic-access.object';
 import { InternalServiceGuard } from './guards/internal-service.guard';
@@ -9,6 +11,7 @@ import { InternalServiceGuard } from './guards/internal-service.guard';
 export class InternalClinicAccessResolver {
   constructor(
     private readonly clinicPetAccessService: ClinicPetAccessService,
+    private readonly auditService: AuditService,
   ) {}
 
   @Query(() => [InternalClinicAccessObject], {
@@ -35,13 +38,21 @@ export class InternalClinicAccessResolver {
     description: "Owner-initiated revocation of a clinic's access to a pet",
   })
   @UseGuards(InternalServiceGuard)
-  internalRevokeClinicPetAccess(
+  async internalRevokeClinicPetAccess(
     @Args('petId', { type: () => ID }) petId: string,
     @Args('clinicId', { type: () => ID }) clinicId: string,
   ): Promise<boolean> {
-    return this.clinicPetAccessService.revokeAccessForPetByOwner(
+    const revoked = await this.clinicPetAccessService.revokeAccessForPetByOwner(
       petId,
       clinicId,
     );
+    if (revoked) {
+      await this.auditService.recordOwnerActivity({
+        petId,
+        clinicId,
+        action: AuditAction.ACCESS_REVOKED,
+      });
+    }
+    return revoked;
   }
 }

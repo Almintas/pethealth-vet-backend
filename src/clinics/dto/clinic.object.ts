@@ -1,4 +1,5 @@
 import { Field, ID, ObjectType } from '@nestjs/graphql';
+import { ClinicMemberRole } from '../../common/enums/clinic-member-role.enum';
 
 @ObjectType('Clinic')
 export class ClinicObject {
@@ -22,4 +23,10 @@ export class ClinicObject {
 
   @Field()
   updatedAt!: Date;
+
+  @Field(() => ClinicMemberRole, {
+    nullable: true,
+    description: "The signed-in user's role in this clinic",
+  })
+  myRole?: ClinicMemberRole | null;
 }

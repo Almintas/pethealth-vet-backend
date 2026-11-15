@@ -1,3 +1,4 @@
+import { AccountApprovalStatus } from '../common/enums/account-approval-status.enum';
 import {
   ConflictException,
   Injectable,
@@ -13,6 +14,8 @@ export interface CreateUserInput {
   email: string;
   password: string;
   role?: UserRole;
+  /** Defaults to the schema default (PENDING). */
+  approvalStatus?: AccountApprovalStatus;
 }
 
 @Injectable()
@@ -34,6 +37,7 @@ export class UsersService {
       email: normalizedEmail,
       passwordHash,
       role: input.role ?? UserRole.VETERINARIAN,
+      ...(input.approvalStatus ? { approvalStatus: input.approvalStatus } : {}),
     });
     return user.save();
   }
@@ -65,7 +69,10 @@ export class UsersService {
     if (!user) {
       return null;
     }
-    const valid = await this.passwordService.compare(password, user.passwordHash);
+    const valid = await this.passwordService.compare(
+      password,
+      user.passwordHash,
+    );
     if (!valid) {
       return null;
     }

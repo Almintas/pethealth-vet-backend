@@ -64,7 +64,9 @@ export class OwnerPetsClient {
   constructor(private readonly configService: ConfigService) {}
 
   async fetchPetsByIds(petIds: string[]): Promise<OwnerCanonicalPet[]> {
-    const uniqueIds = [...new Set(petIds.map((id) => id.trim()).filter(Boolean))];
+    const uniqueIds = [
+      ...new Set(petIds.map((id) => id.trim()).filter(Boolean)),
+    ];
     if (!uniqueIds.length) {
       return [];
     }
@@ -137,11 +139,20 @@ export class OwnerPetsClient {
   async redeemPetShareCode(
     code: string,
     vetClinicId: string,
+    clinicName?: string,
   ): Promise<OwnerCanonicalPet> {
     return this.executeOwnerMutation<OwnerCanonicalPet>(
       `
-        mutation InternalRedeemPetShareCode($code: String!, $vetClinicId: ID!) {
-          internalRedeemPetShareCode(code: $code, vetClinicId: $vetClinicId) {
+        mutation InternalRedeemPetShareCode(
+          $code: String!
+          $vetClinicId: ID!
+          $clinicName: String
+        ) {
+          internalRedeemPetShareCode(
+            code: $code
+            vetClinicId: $vetClinicId
+            clinicName: $clinicName
+          ) {
             id
             name
             species
@@ -157,7 +168,7 @@ export class OwnerPetsClient {
           }
         }
       `,
-      { code, vetClinicId },
+      { code, vetClinicId, clinicName },
       'internalRedeemPetShareCode',
       'Unable to verify the share code with the Owner system',
     );

@@ -6,6 +6,10 @@ import {
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { Connection } from 'mongoose';
+import {
+  ClinicMemberRole,
+  effectiveClinicMemberRole,
+} from '../common/enums/clinic-member-role.enum';
 import { ClinicMembershipStatus } from '../common/enums/clinic-membership-status.enum';
 import { VeterinariansService } from '../veterinarians/veterinarians.service';
 import { mapClinicToObject } from './clinics.mapper';
@@ -24,10 +28,35 @@ export interface CreateClinicServiceInput {
   address?: string;
 }
 
+const TRANSACTION_UNSUPPORTED_PATTERN =
+  /Transaction numbers are only allowed on a replica set member|replica set|does not support retryable writes|Transactions are not supported/i;
+
+/**
+ * True when MongoDB runs as a standalone server (typical local setup), where
+ * transactions are unavailable. Newer drivers report this as "does not support
+ * retryable writes" and keep the original server error in `originalError`, so
+ * the whole error chain is checked.
+ */
+export function isTransactionUnsupportedError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current instanceof Error; depth += 1) {
+    if (TRANSACTION_UNSUPPORTED_PATTERN.test(current.message)) {
+      return true;
+    }
+    const chained = current as Error & {
+      originalError?: unknown;
+      cause?: unknown;
+    };
+    current = chained.originalError ?? chained.cause;
+  }
+  return false;
+}
+
 @Injectable()
 export class ClinicsService {
   constructor(
-    @InjectModel(Clinic.name) private readonly clinicModel: Model<ClinicDocument>,
+    @InjectModel(Clinic.name)
+    private readonly clinicModel: Model<ClinicDocument>,
     @InjectModel(ClinicMembership.name)
     private readonly membershipModel: Model<ClinicMembershipDocument>,
     @InjectConnection() private readonly connection: Connection,
@@ -53,7 +82,8 @@ export class ClinicsService {
     userId: string,
     input: CreateClinicInput,
   ): Promise<ClinicObject> {
-    const profile = await this.veterinariansService.findOptionalByUserId(userId);
+    const profile =
+      await this.veterinariansService.findOptionalByUserId(userId);
     if (!profile) {
       throw new BadRequestException(
         'A veterinarian profile is required to create a clinic',
@@ -64,11 +94,12 @@ export class ClinicsService {
       profile._id.toString(),
       input,
     );
-    return mapClinicToObject(clinic);
+    return { ...mapClinicToObject(clinic), myRole: ClinicMemberRole.ADMIN };
   }
 
   async findMyClinics(userId: string): Promise<ClinicObject[]> {
-    const profile = await this.veterinariansService.findOptionalByUserId(userId);
+    const profile =
+      await this.veterinariansService.findOptionalByUserId(userId);
     if (!profile) {
       return [];
     }
@@ -89,7 +120,16 @@ export class ClinicsService {
       .find({ _id: { $in: clinicIds } })
       .exec();
 
-    return clinics.map((clinic) => mapClinicToObject(clinic));
+    const roleByClinicId = new Map(
+      memberships.map((membership) => [
+        membership.clinicId.toString(),
+        effectiveClinicMemberRole(membership.role),
+      ]),
+    );
+    return clinics.map((clinic) => ({
+      ...mapClinicToObject(clinic),
+      myRole: roleByClinicId.get(clinic._id.toString()) ?? null,
+    }));
   }
 
   async findById(id: string): Promise<ClinicDocument> {
@@ -135,6 +175,7 @@ export class ClinicsService {
               veterinarianProfileId: profileObjectId,
               clinicId: clinic._id,
               status: ClinicMembershipStatus.ACTIVE,
+              role: ClinicMemberRole.ADMIN,
             },
           ],
           { session },
@@ -145,11 +186,7 @@ export class ClinicsService {
       }
       return createdClinic;
     } catch (error) {
-      const transactionUnsupported =
-        error instanceof Error &&
-        /Transaction numbers are only allowed on a replica set member|replica set/i.test(
-          error.message,
-        );
+      const transactionUnsupported = isTransactionUnsupportedError(error);
 
       if (!transactionUnsupported) {
         throw error;
@@ -179,6 +216,7 @@ export class ClinicsService {
         veterinarianProfileId,
         clinicId: clinic._id,
         status: ClinicMembershipStatus.ACTIVE,
+        role: ClinicMemberRole.ADMIN,
       });
       return clinic;
     } catch (error) {

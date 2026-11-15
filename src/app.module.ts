@@ -6,7 +6,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { join } from 'node:path';
 import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
+import { AdminModule } from './admin/admin.module';
+import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { ClinicTeamModule } from './clinic-team/clinic-team.module';
 import { ClinicPetAccessModule } from './clinic-pet-access/clinic-pet-access.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { MedicalRecordsModule } from './medical-records/medical-records.module';
@@ -57,6 +60,9 @@ import { VeterinariansModule } from './veterinarians/veterinarians.module';
     VaccinationsModule,
     HealthModule,
     InternalModule,
+    AuditModule,
+    AdminModule,
+    ClinicTeamModule,
   ],
 })
 export class AppModule {}

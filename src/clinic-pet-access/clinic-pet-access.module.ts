@@ -1,3 +1,4 @@
+import { AuditModule } from '../audit/audit.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PassportModule } from '@nestjs/passport';
@@ -13,6 +14,7 @@ import {
 
 @Module({
   imports: [
+    AuditModule,
     AuthModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     VeterinariansModule,

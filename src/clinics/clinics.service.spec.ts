@@ -7,7 +7,10 @@ import { ClinicMembershipStatus } from '../common/enums/clinic-membership-status
 import { VeterinariansService } from '../veterinarians/veterinarians.service';
 import { ClinicMembership } from './schemas/clinic-membership.schema';
 import { Clinic } from './schemas/clinic.schema';
-import { ClinicsService } from './clinics.service';
+import {
+  ClinicsService,
+  isTransactionUnsupportedError,
+} from './clinics.service';
 
 describe('ClinicsService', () => {
   let service: ClinicsService;
@@ -116,5 +119,35 @@ describe('ClinicsService', () => {
     veterinariansService.findOptionalByUserId.mockResolvedValue(null);
     const clinics = await service.findMyClinics('user-id');
     expect(clinics).toEqual([]);
+  });
+
+  describe('isTransactionUnsupportedError', () => {
+    it('recognises standalone MongoDB errors, including wrapped ones', () => {
+      const wrapped = Object.assign(
+        new Error(
+          'This MongoDB deployment does not support retryable writes. Please add retryWrites=false to your connection string.',
+        ),
+        {
+          originalError: new Error(
+            'Transaction numbers are only allowed on a replica set member or mongos',
+          ),
+        },
+      );
+      expect(isTransactionUnsupportedError(wrapped)).toBe(true);
+      expect(
+        isTransactionUnsupportedError(
+          new Error(
+            'Transaction numbers are only allowed on a replica set member or mongos',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('does not swallow unrelated errors', () => {
+      expect(
+        isTransactionUnsupportedError(new Error('E11000 duplicate key')),
+      ).toBe(false);
+      expect(isTransactionUnsupportedError('not an error')).toBe(false);
+    });
   });
 });

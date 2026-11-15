@@ -52,6 +52,11 @@ export class AuthService {
     return this.buildAuthPayload(user);
   }
 
+  /** Signs a session for a user created or verified elsewhere (e.g. invitations). */
+  issueAuthPayload(user: UserDocument): Promise<AuthPayload> {
+    return this.buildAuthPayload(user);
+  }
+
   private async buildAuthPayload(user: UserDocument): Promise<AuthPayload> {
     const payload: JwtPayload = {
       sub: user._id.toString(),
