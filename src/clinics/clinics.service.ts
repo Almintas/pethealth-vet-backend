@@ -6,6 +6,10 @@ import {
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { Connection } from 'mongoose';
+import {
+  ClinicMemberRole,
+  effectiveClinicMemberRole,
+} from '../common/enums/clinic-member-role.enum';
 import { ClinicMembershipStatus } from '../common/enums/clinic-membership-status.enum';
 import { VeterinariansService } from '../veterinarians/veterinarians.service';
 import { mapClinicToObject } from './clinics.mapper';
@@ -27,7 +31,8 @@ export interface CreateClinicServiceInput {
 @Injectable()
 export class ClinicsService {
   constructor(
-    @InjectModel(Clinic.name) private readonly clinicModel: Model<ClinicDocument>,
+    @InjectModel(Clinic.name)
+    private readonly clinicModel: Model<ClinicDocument>,
     @InjectModel(ClinicMembership.name)
     private readonly membershipModel: Model<ClinicMembershipDocument>,
     @InjectConnection() private readonly connection: Connection,
@@ -53,7 +58,8 @@ export class ClinicsService {
     userId: string,
     input: CreateClinicInput,
   ): Promise<ClinicObject> {
-    const profile = await this.veterinariansService.findOptionalByUserId(userId);
+    const profile =
+      await this.veterinariansService.findOptionalByUserId(userId);
     if (!profile) {
       throw new BadRequestException(
         'A veterinarian profile is required to create a clinic',
@@ -64,11 +70,12 @@ export class ClinicsService {
       profile._id.toString(),
       input,
     );
-    return mapClinicToObject(clinic);
+    return { ...mapClinicToObject(clinic), myRole: ClinicMemberRole.ADMIN };
   }
 
   async findMyClinics(userId: string): Promise<ClinicObject[]> {
-    const profile = await this.veterinariansService.findOptionalByUserId(userId);
+    const profile =
+      await this.veterinariansService.findOptionalByUserId(userId);
     if (!profile) {
       return [];
     }
@@ -89,7 +96,16 @@ export class ClinicsService {
       .find({ _id: { $in: clinicIds } })
       .exec();
 
-    return clinics.map((clinic) => mapClinicToObject(clinic));
+    const roleByClinicId = new Map(
+      memberships.map((membership) => [
+        membership.clinicId.toString(),
+        effectiveClinicMemberRole(membership.role),
+      ]),
+    );
+    return clinics.map((clinic) => ({
+      ...mapClinicToObject(clinic),
+      myRole: roleByClinicId.get(clinic._id.toString()) ?? null,
+    }));
   }
 
   async findById(id: string): Promise<ClinicDocument> {
@@ -135,6 +151,7 @@ export class ClinicsService {
               veterinarianProfileId: profileObjectId,
               clinicId: clinic._id,
               status: ClinicMembershipStatus.ACTIVE,
+              role: ClinicMemberRole.ADMIN,
             },
           ],
           { session },
@@ -179,6 +196,7 @@ export class ClinicsService {
         veterinarianProfileId,
         clinicId: clinic._id,
         status: ClinicMembershipStatus.ACTIVE,
+        role: ClinicMemberRole.ADMIN,
       });
       return clinic;
     } catch (error) {

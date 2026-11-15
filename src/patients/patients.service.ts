@@ -1,9 +1,17 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ClinicPetAccessStatus } from '../common/enums/clinic-pet-access-status.enum';
 import { ClinicMembershipsService } from '../clinics/clinic-memberships.service';
+import { ClinicsService } from '../clinics/clinics.service';
 import { ClinicPetAccessService } from '../clinic-pet-access/clinic-pet-access.service';
 import { ClinicPetAccessDocument } from '../clinic-pet-access/schemas/clinic-pet-access.schema';
-import { OwnerCanonicalPet, OwnerPetsClient } from '../owner-integration/owner-pets.client';
+import {
+  OwnerCanonicalPet,
+  OwnerPetsClient,
+} from '../owner-integration/owner-pets.client';
 import { VeterinariansService } from '../veterinarians/veterinarians.service';
 import { ClaimPatientByShareCodeInput } from './dto/claim-patient-by-share-code.input';
 import { PatientObject } from './dto/patient.object';
@@ -17,6 +25,7 @@ export class PatientsService {
     private readonly ownerPetsClient: OwnerPetsClient,
     private readonly veterinariansService: VeterinariansService,
     private readonly clinicMembershipsService: ClinicMembershipsService,
+    private readonly clinicsService: ClinicsService,
   ) {}
 
   async getMyPatients(userId: string): Promise<PatientObject[]> {
@@ -39,13 +48,18 @@ export class PatientsService {
       if (!ownerPet) {
         continue;
       }
-      patients.push(this.mapOwnerPetToPatient(ownerPet, accessByPetId.get(petId)!));
+      patients.push(
+        this.mapOwnerPetToPatient(ownerPet, accessByPetId.get(petId)!),
+      );
     }
 
     return patients.sort((left, right) => left.name.localeCompare(right.name));
   }
 
-  async getPatientById(userId: string, patientId: string): Promise<PatientObject> {
+  async getPatientById(
+    userId: string,
+    patientId: string,
+  ): Promise<PatientObject> {
     const accessRecords =
       await this.clinicPetAccessService.assertUserHasActiveAccessToPet(
         userId,
@@ -119,9 +133,12 @@ export class PatientsService {
       input.clinicId,
     );
 
+    // The clinic name goes into the owner's "a clinic can now access" email.
+    const clinic = await this.clinicsService.findById(input.clinicId);
     const ownerPet = await this.ownerPetsClient.redeemPetShareCode(
       input.code,
       input.clinicId,
+      clinic.name,
     );
 
     let accessRecords: ClinicPetAccessDocument[];
@@ -185,7 +202,9 @@ export class PatientsService {
     return this.mapOwnerPetToPatient(ownerPet, accessRecords);
   }
 
-  private toOwnerBirthDateIso(value?: Date | string | null): string | undefined {
+  private toOwnerBirthDateIso(
+    value?: Date | string | null,
+  ): string | undefined {
     if (value === undefined || value === null || value === '') {
       return undefined;
     }
@@ -219,7 +238,9 @@ export class PatientsService {
       species: ownerPet.species,
       breed: ownerPet.breed,
       gender: ownerPet.gender,
-      dateOfBirth: ownerPet.birthDate ? new Date(ownerPet.birthDate) : undefined,
+      dateOfBirth: ownerPet.birthDate
+        ? new Date(ownerPet.birthDate)
+        : undefined,
       owner: {
         id: ownerPet.owner.id,
         firstName: ownerPet.owner.firstName,

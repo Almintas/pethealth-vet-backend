@@ -8,8 +8,7 @@ export const envValidationSchema = Joi.object({
   MONGODB_URI: Joi.when('NODE_ENV', {
     is: 'production',
     then: Joi.string().min(1).required().messages({
-      'any.required':
-        'MONGODB_URI is required when NODE_ENV is production',
+      'any.required': 'MONGODB_URI is required when NODE_ENV is production',
     }),
     otherwise: Joi.string().default(
       'mongodb://localhost:27017/pethealth_vet_dev',
@@ -18,10 +17,8 @@ export const envValidationSchema = Joi.object({
   JWT_SECRET: Joi.when('NODE_ENV', {
     is: 'production',
     then: Joi.string().min(32).required().messages({
-      'any.required':
-        'JWT_SECRET is required when NODE_ENV is production',
-      'string.min':
-        'JWT_SECRET must be at least 32 characters in production',
+      'any.required': 'JWT_SECRET is required when NODE_ENV is production',
+      'string.min': 'JWT_SECRET must be at least 32 characters in production',
     }),
     otherwise: Joi.string().default('development-jwt-secret-change-me'),
   }),
@@ -32,9 +29,7 @@ export const envValidationSchema = Joi.object({
       'any.required':
         'OWNER_GRAPHQL_URL is required when NODE_ENV is production',
     }),
-    otherwise: Joi.string()
-      .uri()
-      .default('http://localhost:3000/graphql'),
+    otherwise: Joi.string().uri().default('http://localhost:3000/graphql'),
   }),
   OWNER_SERVICE_SECRET: Joi.when('NODE_ENV', {
     is: 'production',
@@ -46,4 +41,9 @@ export const envValidationSchema = Joi.object({
     }),
     otherwise: Joi.string().default('dev-owner-service-secret-change-me'),
   }),
+  /** Optional: team invitation emails via Resend. Without them, links are logged (dev) and shown to the inviting admin. */
+  RESEND_API_KEY: Joi.string().allow('').optional(),
+  RESEND_FROM_EMAIL: Joi.string().allow('').optional(),
+  /** Public clinic app URL used in invitation links. */
+  VET_FRONTEND_URL: Joi.string().uri().default('http://localhost:5174'),
 });

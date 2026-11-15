@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { ClinicMemberRole } from '../../common/enums/clinic-member-role.enum';
 import { ClinicMembershipStatus } from '../../common/enums/clinic-membership-status.enum';
 
 export type ClinicMembershipDocument = HydratedDocument<ClinicMembership>;
@@ -26,6 +27,10 @@ export class ClinicMembership {
     default: ClinicMembershipStatus.ACTIVE,
   })
   status!: ClinicMembershipStatus;
+
+  /** No default on purpose: legacy memberships (no role) count as ADMIN. */
+  @Prop({ type: String, enum: ClinicMemberRole, required: false })
+  role?: ClinicMemberRole;
 
   createdAt!: Date;
   updatedAt!: Date;

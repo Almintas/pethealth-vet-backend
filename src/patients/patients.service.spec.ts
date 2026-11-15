@@ -8,6 +8,7 @@ import {
 import { Types } from 'mongoose';
 import { ClinicPetAccessStatus } from '../common/enums/clinic-pet-access-status.enum';
 import { ClinicMembershipsService } from '../clinics/clinic-memberships.service';
+import { ClinicsService } from '../clinics/clinics.service';
 import { ClinicPetAccessService } from '../clinic-pet-access/clinic-pet-access.service';
 import { OwnerPetsClient } from '../owner-integration/owner-pets.client';
 import { VeterinariansService } from '../veterinarians/veterinarians.service';
@@ -33,6 +34,9 @@ describe('PatientsService', () => {
   };
   const clinicMembershipsService = {
     assertActiveMembership: jest.fn(),
+  };
+  const clinicsService = {
+    findById: jest.fn(),
   };
 
   const userId = new Types.ObjectId().toString();
@@ -63,21 +67,27 @@ describe('PatientsService', () => {
       ownerPetsClient as unknown as OwnerPetsClient,
       veterinariansService as unknown as VeterinariansService,
       clinicMembershipsService as unknown as ClinicMembershipsService,
+      clinicsService as unknown as ClinicsService,
     );
     veterinariansService.findByUserId.mockResolvedValue({ _id: vetProfileId });
-    clinicMembershipsService.assertActiveMembership.mockResolvedValue(undefined);
+    clinicsService.findById.mockResolvedValue({ name: 'Paws Clinic' } as never);
+    clinicMembershipsService.assertActiveMembership.mockResolvedValue(
+      undefined,
+    );
   });
 
   it('returns authorized patients with mapped owner pet data', async () => {
     const grantedAt = new Date('2026-01-01T00:00:00.000Z');
-    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue([
-      {
-        petId,
-        clinicId: clinicA,
-        status: ClinicPetAccessStatus.ACTIVE,
-        grantedAt,
-      },
-    ]);
+    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue(
+      [
+        {
+          petId,
+          clinicId: clinicA,
+          status: ClinicPetAccessStatus.ACTIVE,
+          grantedAt,
+        },
+      ],
+    );
     ownerPetsClient.fetchPetsByIds.mockResolvedValue([ownerPet]);
 
     const patients = await service.getMyPatients(userId);
@@ -100,20 +110,22 @@ describe('PatientsService', () => {
   });
 
   it('deduplicates the same pet across multiple clinics', async () => {
-    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue([
-      {
-        petId,
-        clinicId: clinicA,
-        status: ClinicPetAccessStatus.ACTIVE,
-        grantedAt: new Date('2026-01-01T00:00:00.000Z'),
-      },
-      {
-        petId,
-        clinicId: clinicB,
-        status: ClinicPetAccessStatus.ACTIVE,
-        grantedAt: new Date('2026-01-02T00:00:00.000Z'),
-      },
-    ]);
+    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue(
+      [
+        {
+          petId,
+          clinicId: clinicA,
+          status: ClinicPetAccessStatus.ACTIVE,
+          grantedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+        {
+          petId,
+          clinicId: clinicB,
+          status: ClinicPetAccessStatus.ACTIVE,
+          grantedAt: new Date('2026-01-02T00:00:00.000Z'),
+        },
+      ],
+    );
     ownerPetsClient.fetchPetsByIds.mockResolvedValue([ownerPet]);
 
     const patients = await service.getMyPatients(userId);
@@ -123,16 +135,20 @@ describe('PatientsService', () => {
   });
 
   it('surfaces a controlled error when the Owner backend is unavailable', async () => {
-    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue([
-      {
-        petId,
-        clinicId: clinicA,
-        status: ClinicPetAccessStatus.ACTIVE,
-        grantedAt: new Date(),
-      },
-    ]);
+    clinicPetAccessService.findActiveAccessForVeterinarianUser.mockResolvedValue(
+      [
+        {
+          petId,
+          clinicId: clinicA,
+          status: ClinicPetAccessStatus.ACTIVE,
+          grantedAt: new Date(),
+        },
+      ],
+    );
     ownerPetsClient.fetchPetsByIds.mockRejectedValue(
-      new ServiceUnavailableException('Unable to load patient data from the Owner system'),
+      new ServiceUnavailableException(
+        'Unable to load patient data from the Owner system',
+      ),
     );
 
     await expect(service.getMyPatients(userId)).rejects.toBeInstanceOf(
@@ -154,10 +170,9 @@ describe('PatientsService', () => {
     const patient = await service.getPatientById(userId, petId);
 
     expect(patient.id).toBe(petId);
-    expect(clinicPetAccessService.assertUserHasActiveAccessToPet).toHaveBeenCalledWith(
-      userId,
-      petId,
-    );
+    expect(
+      clinicPetAccessService.assertUserHasActiveAccessToPet,
+    ).toHaveBeenCalledWith(userId, petId);
   });
 
   it('rejects viewing a patient without active access', async () => {
@@ -191,10 +206,9 @@ describe('PatientsService', () => {
       species: 'Cat',
     });
 
-    expect(clinicMembershipsService.assertActiveMembership).toHaveBeenCalledWith(
-      vetProfileId.toString(),
-      clinicA.toString(),
-    );
+    expect(
+      clinicMembershipsService.assertActiveMembership,
+    ).toHaveBeenCalledWith(vetProfileId.toString(), clinicA.toString());
     expect(ownerPetsClient.registerPetForVet).toHaveBeenCalled();
     expect(clinicPetAccessService.grantActiveAccess).toHaveBeenCalled();
     expect(patient.name).toBe('Luna');
@@ -261,11 +275,14 @@ describe('PatientsService', () => {
       },
     });
 
-    expect(ownerPetsClient.updateOwnerProfileForVet).toHaveBeenCalledWith(petId, {
-      firstName: 'Janet',
-      lastName: 'Ownerson',
-      email: 'jane@example.com',
-    });
+    expect(ownerPetsClient.updateOwnerProfileForVet).toHaveBeenCalledWith(
+      petId,
+      {
+        firstName: 'Janet',
+        lastName: 'Ownerson',
+        email: 'jane@example.com',
+      },
+    );
     expect(patient.owner.firstName).toBe('Janet');
     expect(patient.owner.lastName).toBe('Ownerson');
   });
@@ -298,7 +315,9 @@ describe('PatientsService', () => {
       },
     ]);
     ownerPetsClient.updateOwnerProfileForVet.mockRejectedValue(
-      new ServiceUnavailableException('Unable to update patient owner in the Owner system'),
+      new ServiceUnavailableException(
+        'Unable to update patient owner in the Owner system',
+      ),
     );
 
     await expect(
@@ -357,13 +376,14 @@ describe('PatientsService', () => {
       code: 'ABCD-2345',
     });
 
-    expect(clinicMembershipsService.assertActiveMembership).toHaveBeenCalledWith(
-      vetProfileId.toString(),
-      clinicA.toString(),
-    );
+    expect(
+      clinicMembershipsService.assertActiveMembership,
+    ).toHaveBeenCalledWith(vetProfileId.toString(), clinicA.toString());
+    expect(clinicsService.findById).toHaveBeenCalledWith(clinicA.toString());
     expect(ownerPetsClient.redeemPetShareCode).toHaveBeenCalledWith(
       'ABCD-2345',
       clinicA.toString(),
+      'Paws Clinic',
     );
     expect(clinicPetAccessService.grantActiveAccess).toHaveBeenCalledWith({
       clinicId: clinicA.toString(),
