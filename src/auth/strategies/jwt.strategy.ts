@@ -24,6 +24,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<UserDocument> {
+    // A two-factor "pending" token proves only the password, not a session.
+    if (payload.purpose) {
+      throw new UnauthorizedException();
+    }
     try {
       return await this.usersService.findById(payload.sub);
     } catch {

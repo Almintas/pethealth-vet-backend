@@ -1,7 +1,11 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '../common/enums/user-role.enum';
-import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
+import {
+  JwtPayload,
+  TWO_FACTOR_PENDING_PURPOSE,
+  TwoFactorPendingPayload,
+} from '../common/interfaces/jwt-payload.interface';
 import { UserDocument } from '../users/schemas/user.schema';
 import { mapUserDocumentToObject } from '../users/users.mapper';
 import { UsersService } from '../users/users.service';
@@ -21,6 +25,21 @@ export class AuthService {
     const user = await this.usersService.validateCredentials(email, password);
     if (!user) {
       throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (user.twoFactorEnabled) {
+      const pending: TwoFactorPendingPayload = {
+        sub: user._id.toString(),
+        purpose: TWO_FACTOR_PENDING_PURPOSE,
+      };
+      return {
+        accessToken: null,
+        user: null,
+        twoFactorRequired: true,
+        twoFactorToken: await this.jwtService.signAsync(pending, {
+          expiresIn: '5m',
+        }),
+      };
     }
 
     return this.buildAuthPayload(user);
@@ -69,6 +88,7 @@ export class AuthService {
     return {
       accessToken,
       user: mapUserDocumentToObject(user),
+      twoFactorRequired: false,
     };
   }
 }

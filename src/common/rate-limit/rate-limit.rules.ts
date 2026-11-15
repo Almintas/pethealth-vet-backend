@@ -28,4 +28,11 @@ export const RATE_LIMITS = {
     windowMs: 60 * MINUTE,
   },
   invite: { name: 'invite', perIp: 30, windowMs: 60 * MINUTE },
+  twoFactorLogin: {
+    name: 'two-factor-login',
+    perIp: 15,
+    windowMs: 15 * MINUTE,
+    perIdentifier: { path: 'input.twoFactorToken', limit: 5 },
+  },
+  twoFactorCode: { name: 'two-factor-code', perIp: 15, windowMs: 15 * MINUTE },
 } satisfies Record<string, RateLimitRule>;

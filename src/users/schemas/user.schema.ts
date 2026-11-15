@@ -40,6 +40,26 @@ export class User {
   @Prop({ type: Date, default: null })
   approvalDecidedAt?: Date | null;
 
+  /** Two-factor sign-in with an authenticator app (TOTP). */
+  @Prop({ type: Boolean, default: false })
+  twoFactorEnabled!: boolean;
+
+  /** Encrypted TOTP secret (see two-factor/secret-box.ts). */
+  @Prop({ type: String, default: null, select: false })
+  twoFactorSecret?: string | null;
+
+  /** Encrypted secret during setup, before the first code is confirmed. */
+  @Prop({ type: String, default: null, select: false })
+  twoFactorPendingSecret?: string | null;
+
+  /** SHA-256 hashes of unused recovery codes. */
+  @Prop({ type: [String], default: [], select: false })
+  twoFactorRecoveryCodes?: string[];
+
+  /** Last accepted TOTP time step, so a code can't be replayed. */
+  @Prop({ type: Number, default: null, select: false })
+  twoFactorLastUsedStep?: number | null;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

@@ -54,13 +54,37 @@ describe('AuthService', () => {
     const result = await service.login('vet@clinic.test', 'password123');
 
     expect(result.accessToken).toBe('token');
-    expect(result.user.email).toBe('vet@clinic.test');
+    expect(result.user?.email).toBe('vet@clinic.test');
+    expect(result.twoFactorRequired).toBe(false);
     expect(result.user).not.toHaveProperty('passwordHash');
     expect(jwtService.signAsync).toHaveBeenCalledWith({
       sub: 'user-id',
       email: 'vet@clinic.test',
       role: UserRole.VETERINARIAN,
     });
+  });
+
+  it('asks for a second factor instead of a session when 2FA is on', async () => {
+    usersService.validateCredentials.mockResolvedValue({
+      _id: 'user-id',
+      email: 'vet@clinic.test',
+      role: UserRole.VETERINARIAN,
+      twoFactorEnabled: true,
+    });
+    jwtService.signAsync.mockResolvedValue('pending-token');
+
+    const result = await service.login('vet@clinic.test', 'password123');
+
+    expect(result).toEqual({
+      accessToken: null,
+      user: null,
+      twoFactorRequired: true,
+      twoFactorToken: 'pending-token',
+    });
+    expect(jwtService.signAsync).toHaveBeenCalledWith(
+      { sub: 'user-id', purpose: '2fa-pending' },
+      { expiresIn: '5m' },
+    );
   });
 
   it('rejects invalid credentials', async () => {

@@ -36,6 +36,7 @@ describe('UsersResolver', () => {
       email: 'vet@clinic.test',
       role: 'VETERINARIAN' as never,
       approvalStatus: 'APPROVED' as never,
+      twoFactorEnabled: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -53,6 +54,7 @@ describe('UsersResolver', () => {
       email: 'vet@clinic.test',
       role: 'RECEPTIONIST' as never,
       approvalStatus: 'APPROVED' as never,
+      twoFactorEnabled: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     });

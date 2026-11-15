@@ -44,6 +44,8 @@ export const envValidationSchema = Joi.object({
   /** Optional: team invitation emails via Resend. Without them, links are logged (dev) and shown to the inviting admin. */
   RESEND_API_KEY: Joi.string().allow('').optional(),
   RESEND_FROM_EMAIL: Joi.string().allow('').optional(),
+  /** Optional: key for encrypting authenticator secrets (defaults to JWT_SECRET). Do not change once in use. */
+  TWO_FACTOR_ENCRYPTION_KEY: Joi.string().allow('').optional(),
   /** Public clinic app URL used in invitation links. */
   VET_FRONTEND_URL: Joi.string().uri().default('http://localhost:5174'),
 });

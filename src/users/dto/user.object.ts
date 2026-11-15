@@ -17,6 +17,9 @@ export class UserObject {
   @Field(() => AccountApprovalStatus)
   approvalStatus!: AccountApprovalStatus;
 
+  @Field({ description: 'Whether sign-in requires an authenticator code' })
+  twoFactorEnabled!: boolean;
+
   @Field()
   createdAt!: Date;
 

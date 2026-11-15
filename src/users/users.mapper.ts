@@ -8,6 +8,7 @@ export function mapUserDocumentToObject(user: UserDocument): UserObject {
     email: user.email,
     role: user.role,
     approvalStatus: user.approvalStatus ?? AccountApprovalStatus.PENDING,
+    twoFactorEnabled: user.twoFactorEnabled ?? false,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

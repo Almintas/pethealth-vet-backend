@@ -11,6 +11,7 @@ import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 import { ClinicTeamModule } from './clinic-team/clinic-team.module';
+import { TwoFactorModule } from './two-factor/two-factor.module';
 import { ClinicPetAccessModule } from './clinic-pet-access/clinic-pet-access.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { MedicalRecordsModule } from './medical-records/medical-records.module';
@@ -65,6 +66,7 @@ import { VeterinariansModule } from './veterinarians/veterinarians.module';
     AuditModule,
     AdminModule,
     ClinicTeamModule,
+    TwoFactorModule,
   ],
 })
 export class AppModule {}
