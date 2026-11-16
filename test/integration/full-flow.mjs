@@ -360,6 +360,51 @@ async function main() {
     expect(bytes.equals(labPdf), 'downloaded file differs from the upload');
   });
 
+  await step('clinic sets a reminder that the owner sees but cannot delete', async () => {
+    const created = await ok(
+      VET,
+      `mutation ($input: CreateVetReminderInput!) { createVetReminder(input: $input) { id managedBy clinicName } }`,
+      {
+        input: {
+          clinicId,
+          petId,
+          type: 'APPOINTMENT',
+          title: 'Follow-up visit',
+          dueAt: new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString(),
+        },
+      },
+      vet.token,
+    );
+    expect(created.createVetReminder.managedBy === 'CLINIC', 'reminder is not marked as a clinic reminder');
+    const listed = await ok(
+      OWNER,
+      `query ($petId: ID!) { reminders(petId: $petId) { id title managedBy clinicName createdByName } }`,
+      { petId },
+      ownerToken,
+    );
+    const reminder = listed.reminders.find((r) => r.id === created.createVetReminder.id);
+    expect(reminder, 'clinic reminder missing on the owner side');
+    expect(reminder.clinicName === `CI Clinic ${RUN}`, `clinic name was ${reminder.clinicName}`);
+    expect(reminder.createdByName === 'Ona Vet', `created by ${reminder.createdByName}`);
+    await fails(
+      OWNER,
+      `mutation ($id: ID!) { deleteReminder(id: $id) }`,
+      { id: reminder.id },
+      ownerToken,
+      /veterinary clinic/i,
+    );
+    const clinicList = await ok(
+      VET,
+      `query ($id: ID!) { patientReminders(patientId: $id) { id title } }`,
+      { id: petId },
+      vet.token,
+    );
+    expect(
+      clinicList.patientReminders.some((r) => r.id === reminder.id),
+      'clinic does not see its reminder',
+    );
+  });
+
   await step('owner sees clinic access and the activity log', async () => {
     const access = await ok(
       OWNER,
@@ -382,6 +427,7 @@ async function main() {
     expect(has('ACCESS_GRANTED', 'PATIENT'), 'activity log lacks ACCESS_GRANTED');
     expect(has('CREATED', 'VACCINATION'), 'activity log lacks the vaccination');
     expect(has('CREATED', 'ATTACHMENT'), 'activity log lacks the attachment');
+    expect(has('CREATED', 'REMINDER'), 'activity log lacks the reminder');
     expect(has('VIEWED', 'PATIENT'), 'activity log lacks the view');
     expect(
       log.petActivityLog.every((e) => e.actorName === 'Ona Vet' && e.clinicName === `CI Clinic ${RUN}`),

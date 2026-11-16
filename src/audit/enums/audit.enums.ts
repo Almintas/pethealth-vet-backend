@@ -18,6 +18,8 @@ export enum AuditEntityType {
   APPOINTMENT = 'APPOINTMENT',
   /** A file attached to a medical record. */
   ATTACHMENT = 'ATTACHMENT',
+  /** A reminder the clinic set for the owner. */
+  REMINDER = 'REMINDER',
 }
 
 export enum AuditActorType {
