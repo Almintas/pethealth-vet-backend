@@ -48,6 +48,19 @@ type UploadedAttachmentFile = {
   size: number;
 };
 
+/**
+ * Multer reads multipart file names as latin1; turn UTF-8 names such as
+ * "Krūtinės.pdf" back into readable text before passing them on.
+ */
+export function decodeMultipartFileName(name: string): string {
+  // eslint-disable-next-line no-control-regex
+  if (/[^\u0000-\u00ff]/.test(name)) {
+    return name;
+  }
+  const decoded = Buffer.from(name, 'latin1').toString('utf8');
+  return decoded.includes('\ufffd') ? name : decoded;
+}
+
 /** The REST twin of GqlRolesGuard for the clinical roles. */
 function clinicalUser(request: { user?: UserDocument }): UserDocument {
   const user = request.user;
@@ -95,7 +108,7 @@ export class MedicalRecordAttachmentsController {
         userId,
         recordId,
         body.clinicId,
-        file,
+        { ...file, originalname: decodeMultipartFileName(file.originalname) },
       );
     await this.auditService.recordClinicActivity({
       actorUserId: userId,
