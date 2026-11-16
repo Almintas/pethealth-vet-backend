@@ -21,6 +21,9 @@ const OWNER = process.env.OWNER_GRAPHQL_URL ?? 'http://localhost:3000/graphql';
 const VET = process.env.VET_GRAPHQL_URL ?? 'http://localhost:3001/graphql';
 const RUN = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
 const PASSWORD = 'Integration-Pass-123';
+// A unique 15-digit chip per run, typed with spaces like on a pet passport.
+const CHIP = `440${String(Date.now()).slice(-12)}`;
+const microchip = `${CHIP.slice(0, 3)} ${CHIP.slice(3, 6)} ${CHIP.slice(6, 9)} ${CHIP.slice(9)}`;
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 let failures = 0;
@@ -217,8 +220,8 @@ async function main() {
   const petId = await step('owner adds a pet', async () => {
     const data = await ok(
       OWNER,
-      `mutation { createPet(input: { name: "Luna", species: "Cat" }) { id } }`,
-      {},
+      `mutation ($chip: String!) { createPet(input: { name: "Luna", species: "Cat", microchipNumber: $chip }) { id } }`,
+      { chip: microchip },
       ownerToken,
     );
     return data.createPet.id;
@@ -358,6 +361,19 @@ async function main() {
     expect(response.status === 200, `download answered ${response.status}`);
     const bytes = Buffer.from(await response.arrayBuffer());
     expect(bytes.equals(labPdf), 'downloaded file differs from the upload');
+  });
+
+  await step('a clinic with consent finds its patient by the typed microchip', async () => {
+    const data = await ok(
+      VET,
+      `query ($input: MicrochipSearchInput!) { microchipSearch(input: $input) { matches { petId hasAccess } } }`,
+      { input: { clinicId, microchip } },
+      vet.token,
+    );
+    expect(
+      data.microchipSearch.matches.some((m) => m.petId === petId && m.hasAccess),
+      'patient not found with access',
+    );
   });
 
   await step('clinic sets a reminder that the owner sees but cannot delete', async () => {
@@ -533,6 +549,43 @@ async function main() {
   await step('clinic staff can no longer see the pet', async () => {
     await fails(VET, `query ($id: ID!) { patient(id: $id) { id } }`, { id: petId }, vet.token);
     await fails(VET, `query ($id: ID!) { patient(id: $id) { id } }`, { id: petId }, deskToken);
+  });
+
+  await step('without consent a microchip search shows only the pet, and can notify the owner', async () => {
+    const searchQuery = `query ($input: MicrochipSearchInput!) {
+      microchipSearch(input: $input) { microchip matches { petId name species hasAccess } }
+    }`;
+    const data = await ok(VET, searchQuery, { input: { clinicId, microchip: CHIP } }, vet.token);
+    expect(data.microchipSearch.microchip === CHIP, `normalized chip was ${data.microchipSearch.microchip}`);
+    const match = data.microchipSearch.matches.find((m) => m.petId === petId);
+    expect(match, 'pet not found by microchip');
+    expect(match.name === 'Luna' && match.hasAccess === false, `unexpected match ${JSON.stringify(match)}`);
+    await fails(
+      VET,
+      `query ($input: MicrochipSearchInput!) { microchipSearch(input: $input) { matches { owner { email } } } }`,
+      { input: { clinicId, microchip: CHIP } },
+      vet.token,
+      /Cannot query field "owner"/,
+    );
+    const sent = await ok(
+      VET,
+      `mutation ($input: NotifyOwnerAboutFoundPetInput!) { notifyOwnerAboutFoundPet(input: $input) }`,
+      { input: { clinicId, microchip: CHIP, petId, message: 'Luna is safe with us.' } },
+      vet.token,
+    );
+    // CI has no email provider, so the answer is false; it must not fail.
+    expect(typeof sent.notifyOwnerAboutFoundPet === 'boolean', 'notify did not answer');
+    const log = await ok(
+      OWNER,
+      `query ($petId: ID!) { petActivityLog(petId: $petId) { action entityType } }`,
+      { petId },
+      ownerToken,
+    );
+    expect(
+      log.petActivityLog.some((e) => e.action === 'MICROCHIP_LOOKUP') &&
+        log.petActivityLog.some((e) => e.action === 'OWNER_NOTIFIED'),
+      'activity log lacks the microchip lookup or the notice',
+    );
   });
 
   await step('the revocation appears in the owner’s activity log', async () => {

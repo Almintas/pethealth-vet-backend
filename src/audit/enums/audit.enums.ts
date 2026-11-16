@@ -6,6 +6,10 @@ export enum AuditAction {
   UPDATED = 'UPDATED',
   CANCELLED = 'CANCELLED',
   DELETED = 'DELETED',
+  /** A clinic found the pet by its microchip. */
+  MICROCHIP_LOOKUP = 'MICROCHIP_LOOKUP',
+  /** A clinic asked PetHealth to email the owner that the pet is with them. */
+  OWNER_NOTIFIED = 'OWNER_NOTIFIED',
   ACCESS_GRANTED = 'ACCESS_GRANTED',
   ACCESS_REVOKED = 'ACCESS_REVOKED',
 }

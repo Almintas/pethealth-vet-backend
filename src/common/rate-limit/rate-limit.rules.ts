@@ -35,4 +35,15 @@ export const RATE_LIMITS = {
     perIdentifier: { path: 'input.twoFactorToken', limit: 5 },
   },
   twoFactorCode: { name: 'two-factor-code', perIp: 15, windowMs: 15 * MINUTE },
+  // Microchip numbers are guessable; keep lookups at a human pace.
+  microchipSearch: {
+    name: 'microchip-search',
+    perIp: 30,
+    windowMs: 15 * MINUTE,
+  },
+  microchipNotify: {
+    name: 'microchip-notify',
+    perIp: 10,
+    windowMs: 60 * MINUTE,
+  },
 } satisfies Record<string, RateLimitRule>;
