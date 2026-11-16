@@ -6,6 +6,7 @@ import { ClinicPetAccessModule } from '../clinic-pet-access/clinic-pet-access.mo
 import { ClinicsModule } from '../clinics/clinics.module';
 import { OwnerIntegrationModule } from '../owner-integration/owner-integration.module';
 import { VeterinariansModule } from '../veterinarians/veterinarians.module';
+import { MedicalRecordAttachmentsController } from './medical-record-attachments.controller';
 import { MedicalRecordsResolver } from './medical-records.resolver';
 import { MedicalRecordsService } from './medical-records.service';
 
@@ -19,6 +20,7 @@ import { MedicalRecordsService } from './medical-records.service';
     VeterinariansModule,
     OwnerIntegrationModule,
   ],
+  controllers: [MedicalRecordAttachmentsController],
   providers: [MedicalRecordsService, MedicalRecordsResolver],
   exports: [MedicalRecordsService],
 })

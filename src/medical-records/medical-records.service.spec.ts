@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 import { ClinicPetAccessService } from '../clinic-pet-access/clinic-pet-access.service';
 import { ClinicMembershipsService } from '../clinics/clinic-memberships.service';
 import { ClinicsService } from '../clinics/clinics.service';
+import { OwnerAttachmentsClient } from '../owner-integration/owner-attachments.client';
 import { OwnerMedicalRecordsClient } from '../owner-integration/owner-medical-records.client';
 import { OwnerPetsClient } from '../owner-integration/owner-pets.client';
 import { VeterinariansService } from '../veterinarians/veterinarians.service';
@@ -33,6 +34,11 @@ describe('MedicalRecordsService', () => {
   };
   const veterinariansService = {
     findByUserId: jest.fn(),
+  };
+  const ownerAttachmentsClient = {
+    upload: jest.fn(),
+    download: jest.fn(),
+    delete: jest.fn(),
   };
 
   const userId = new Types.ObjectId().toString();
@@ -77,6 +83,7 @@ describe('MedicalRecordsService', () => {
       ownerMedicalRecordsClient as unknown as OwnerMedicalRecordsClient,
       ownerPetsClient as unknown as OwnerPetsClient,
       veterinariansService as unknown as VeterinariansService,
+      ownerAttachmentsClient as unknown as OwnerAttachmentsClient,
     );
     veterinariansService.findByUserId.mockResolvedValue({
       _id: vetProfileId,
@@ -257,5 +264,124 @@ describe('MedicalRecordsService', () => {
     expect(
       (service as { deleteMedicalRecord?: unknown }).deleteMedicalRecord,
     ).toBeUndefined();
+  });
+
+  describe('attachments', () => {
+    const file = {
+      buffer: Buffer.from('%PDF-1.4'),
+      originalname: 'xray.pdf',
+      mimetype: 'application/pdf',
+    };
+    const attachment = {
+      id: 'att-1',
+      medicalRecordId: recordId,
+      fileName: 'xray.pdf',
+      contentType: 'application/pdf',
+      size: 8,
+      clinicId: clinicA,
+      clinicName: 'Clinic A',
+      uploadedByName: 'Dr Vet',
+      createdAt: '2026-11-16T10:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      ownerMedicalRecordsClient.fetchMedicalRecordById.mockResolvedValue(
+        baseRecord,
+      );
+    });
+
+    it('attaches a file for the clinic with its name and the vet', async () => {
+      clinicPetAccessService.findActiveAccessForClinicAndPet.mockResolvedValue({
+        petId,
+        clinicId: clinicA,
+      });
+      clinicsService.findById.mockResolvedValue({ name: 'Clinic A' });
+      ownerAttachmentsClient.upload.mockResolvedValue(attachment);
+
+      const result = await service.addAttachment(
+        userId,
+        recordId,
+        clinicA,
+        file,
+      );
+
+      expect(ownerAttachmentsClient.upload).toHaveBeenCalledWith(
+        recordId,
+        file,
+        {
+          clinicId: clinicA,
+          clinicName: 'Clinic A',
+          uploadedByName: 'Dr Vet',
+        },
+      );
+      expect(result).toEqual({
+        petId,
+        recordTitle: 'Routine annual check-up',
+        attachment,
+      });
+    });
+
+    it('refuses to attach without access at the clinic', async () => {
+      clinicPetAccessService.findActiveAccessForClinicAndPet.mockResolvedValue(
+        null,
+      );
+
+      await expect(
+        service.addAttachment(userId, recordId, clinicA, file),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(ownerAttachmentsClient.upload).not.toHaveBeenCalled();
+    });
+
+    it('checks patient access before opening a file', async () => {
+      clinicPetAccessService.assertUserHasActiveAccessToPet.mockRejectedValue(
+        new ForbiddenException('No access'),
+      );
+
+      await expect(
+        service.openAttachment(userId, recordId, 'att-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(ownerAttachmentsClient.download).not.toHaveBeenCalled();
+    });
+
+    it('removes a file on behalf of the clinic', async () => {
+      clinicPetAccessService.findActiveAccessForClinicAndPet.mockResolvedValue({
+        petId,
+        clinicId: clinicA,
+      });
+      ownerAttachmentsClient.delete.mockResolvedValue(attachment);
+
+      const result = await service.removeAttachment(
+        userId,
+        recordId,
+        'att-1',
+        clinicA,
+      );
+
+      expect(ownerAttachmentsClient.delete).toHaveBeenCalledWith(
+        recordId,
+        'att-1',
+        clinicA,
+      );
+      expect(result.attachment.fileName).toBe('xray.pdf');
+    });
+
+    it('returns attachments with the record', async () => {
+      clinicPetAccessService.assertUserHasActiveAccessToPet.mockResolvedValue([
+        { petId, clinicId: clinicA },
+      ]);
+      ownerMedicalRecordsClient.fetchMedicalRecordById.mockResolvedValue({
+        ...baseRecord,
+        attachments: [attachment],
+      });
+
+      const record = await service.getMedicalRecordById(userId, recordId);
+
+      expect(record.attachments).toEqual([
+        expect.objectContaining({
+          id: 'att-1',
+          createdAt: new Date('2026-11-16T10:00:00.000Z'),
+        }),
+      ]);
+    });
   });
 });

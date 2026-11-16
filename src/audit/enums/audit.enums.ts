@@ -5,6 +5,7 @@ export enum AuditAction {
   CREATED = 'CREATED',
   UPDATED = 'UPDATED',
   CANCELLED = 'CANCELLED',
+  DELETED = 'DELETED',
   ACCESS_GRANTED = 'ACCESS_GRANTED',
   ACCESS_REVOKED = 'ACCESS_REVOKED',
 }
@@ -15,6 +16,8 @@ export enum AuditEntityType {
   MEDICATION = 'MEDICATION',
   VACCINATION = 'VACCINATION',
   APPOINTMENT = 'APPOINTMENT',
+  /** A file attached to a medical record. */
+  ATTACHMENT = 'ATTACHMENT',
 }
 
 export enum AuditActorType {

@@ -1,5 +1,6 @@
 import { Field, GraphQLISODateTime, ID, ObjectType } from '@nestjs/graphql';
 import { AppointmentPatientSummaryObject } from '../../appointments/dto/appointment-patient-summary.object';
+import { VetMedicalRecordAttachmentObject } from './medical-record-attachment.object';
 
 @ObjectType('VetMedicalRecord')
 export class VetMedicalRecordObject {
@@ -32,6 +33,11 @@ export class VetMedicalRecordObject {
 
   @Field({ nullable: true })
   notes?: string;
+
+  @Field(() => [VetMedicalRecordAttachmentObject], {
+    description: 'Files attached to the record, oldest first',
+  })
+  attachments!: VetMedicalRecordAttachmentObject[];
 
   @Field(() => AppointmentPatientSummaryObject)
   patient!: AppointmentPatientSummaryObject;

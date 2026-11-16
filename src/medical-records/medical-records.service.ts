@@ -11,6 +11,12 @@ import {
   OwnerMedicalRecordsClient,
   OwnerMedicalRecordsPageQuery,
 } from '../owner-integration/owner-medical-records.client';
+import {
+  AttachmentDownload,
+  AttachmentUpload,
+  OwnerAttachment,
+  OwnerAttachmentsClient,
+} from '../owner-integration/owner-attachments.client';
 import { OwnerPetsClient } from '../owner-integration/owner-pets.client';
 import { VeterinariansService } from '../veterinarians/veterinarians.service';
 import { VetAppointmentObject } from '../appointments/dto/appointment.object';
@@ -18,6 +24,12 @@ import { CreateVetMedicalRecordInput } from './dto/create-vet-medical-record.inp
 import { VetMedicalRecordObject } from './dto/medical-record.object';
 import { PatientMedicalRecordsPageObject } from './dto/patient-medical-records-page.object';
 import { UpdateVetMedicalRecordInput } from './dto/update-vet-medical-record.input';
+
+export type AttachmentChange = {
+  petId: string;
+  recordTitle: string;
+  attachment: OwnerAttachment;
+};
 
 @Injectable()
 export class MedicalRecordsService {
@@ -28,6 +40,7 @@ export class MedicalRecordsService {
     private readonly ownerMedicalRecordsClient: OwnerMedicalRecordsClient,
     private readonly ownerPetsClient: OwnerPetsClient,
     private readonly veterinariansService: VeterinariansService,
+    private readonly ownerAttachmentsClient: OwnerAttachmentsClient,
   ) {}
 
   async getMedicalRecordsPageForPatient(
@@ -128,6 +141,70 @@ export class MedicalRecordsService {
     return this.mapRecord(updated, patient);
   }
 
+  /** Attaches a file to a record on behalf of the user's clinic. */
+  async addAttachment(
+    userId: string,
+    medicalRecordId: string,
+    clinicId: string,
+    file: AttachmentUpload,
+  ): Promise<AttachmentChange> {
+    const record =
+      await this.ownerMedicalRecordsClient.fetchMedicalRecordById(
+        medicalRecordId,
+      );
+    await this.assertAccessAtClinic(userId, clinicId, record.petId);
+    const clinic = await this.clinicsService.findById(clinicId);
+    const profile = await this.veterinariansService.findByUserId(userId);
+
+    const attachment = await this.ownerAttachmentsClient.upload(
+      medicalRecordId,
+      file,
+      {
+        clinicId,
+        clinicName: clinic.name,
+        uploadedByName: `${profile.firstName} ${profile.lastName}`.trim(),
+      },
+    );
+    return { petId: record.petId, recordTitle: record.title, attachment };
+  }
+
+  /** Streams an attachment to a user whose clinic can see the patient. */
+  async openAttachment(
+    userId: string,
+    medicalRecordId: string,
+    attachmentId: string,
+  ): Promise<AttachmentDownload> {
+    const record =
+      await this.ownerMedicalRecordsClient.fetchMedicalRecordById(
+        medicalRecordId,
+      );
+    await this.clinicPetAccessService.assertUserHasActiveAccessToPet(
+      userId,
+      record.petId,
+    );
+    return this.ownerAttachmentsClient.download(medicalRecordId, attachmentId);
+  }
+
+  /** Removes a file; the Owner system allows it only for the uploading clinic. */
+  async removeAttachment(
+    userId: string,
+    medicalRecordId: string,
+    attachmentId: string,
+    clinicId: string,
+  ): Promise<AttachmentChange> {
+    const record =
+      await this.ownerMedicalRecordsClient.fetchMedicalRecordById(
+        medicalRecordId,
+      );
+    await this.assertAccessAtClinic(userId, clinicId, record.petId);
+    const attachment = await this.ownerAttachmentsClient.delete(
+      medicalRecordId,
+      attachmentId,
+      clinicId,
+    );
+    return { petId: record.petId, recordTitle: record.title, attachment };
+  }
+
   private async assertAccessAtClinic(
     userId: string,
     clinicId: string,
@@ -182,6 +259,10 @@ export class MedicalRecordsService {
       veterinarianName: record.veterinarianName,
       clinicName: record.clinicName,
       notes: record.notes,
+      attachments: (record.attachments ?? []).map((attachment) => ({
+        ...attachment,
+        createdAt: new Date(attachment.createdAt),
+      })),
       patient,
     };
   }

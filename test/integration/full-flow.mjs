@@ -308,6 +308,58 @@ async function main() {
     expect(rabies.veterinarianName === 'Ona Vet', `vet name was ${rabies.veterinarianName}`);
   });
 
+  const labPdf = Buffer.from(`%PDF-1.4\n% lab result ${RUN}\n%%EOF\n`);
+  const attachment = await step('clinic attaches a lab result to a medical record', async () => {
+    const data = await ok(
+      VET,
+      `mutation ($input: CreateVetMedicalRecordInput!) { createVetMedicalRecord(input: $input) { id } }`,
+      {
+        input: {
+          clinicId,
+          petId,
+          date: new Date().toISOString(),
+          type: 'LAB_TEST',
+          title: 'Blood test',
+        },
+      },
+      vet.token,
+    );
+    const recordId = data.createVetMedicalRecord.id;
+    const form = new FormData();
+    form.append('clinicId', clinicId);
+    form.append('file', new Blob([labPdf], { type: 'application/pdf' }), 'Kraujo tyrimas.pdf');
+    const response = await fetch(`${VET.replace(/\/graphql$/, '')}/medical-records/${recordId}/attachments`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${vet.token}` },
+      body: form,
+    });
+    const body = await response.json();
+    expect(response.status === 201, `upload answered ${response.status}: ${JSON.stringify(body)}`);
+    expect(body.fileName === 'Kraujo tyrimas.pdf', `file name was ${body.fileName}`);
+    expect(body.clinicName === `CI Clinic ${RUN}`, `clinic name was ${body.clinicName}`);
+    return { recordId, id: body.id };
+  });
+
+  await step('owner sees the attachment and downloads the same bytes', async () => {
+    const data = await ok(
+      OWNER,
+      `query ($id: ID!) { medicalRecord(id: $id) { attachments { id fileName clinicName } } }`,
+      { id: attachment.recordId },
+      ownerToken,
+    );
+    expect(
+      data.medicalRecord.attachments.some((a) => a.id === attachment.id),
+      'attachment missing on the owner side',
+    );
+    const response = await fetch(
+      `${OWNER.replace(/\/graphql$/, '')}/medical-records/${attachment.recordId}/attachments/${attachment.id}`,
+      { headers: { authorization: `Bearer ${ownerToken}` } },
+    );
+    expect(response.status === 200, `download answered ${response.status}`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    expect(bytes.equals(labPdf), 'downloaded file differs from the upload');
+  });
+
   await step('owner sees clinic access and the activity log', async () => {
     const access = await ok(
       OWNER,
@@ -329,6 +381,7 @@ async function main() {
       log.petActivityLog.some((e) => e.action === action && e.entityType === entityType);
     expect(has('ACCESS_GRANTED', 'PATIENT'), 'activity log lacks ACCESS_GRANTED');
     expect(has('CREATED', 'VACCINATION'), 'activity log lacks the vaccination');
+    expect(has('CREATED', 'ATTACHMENT'), 'activity log lacks the attachment');
     expect(has('VIEWED', 'PATIENT'), 'activity log lacks the view');
     expect(
       log.petActivityLog.every((e) => e.actorName === 'Ona Vet' && e.clinicName === `CI Clinic ${RUN}`),

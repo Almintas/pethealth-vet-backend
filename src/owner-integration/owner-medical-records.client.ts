@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { OwnerAttachment } from './owner-attachments.client';
 import { requestOwnerGraphql } from './owner-graphql.request';
 
 export type OwnerCanonicalMedicalRecord = {
@@ -13,6 +14,7 @@ export type OwnerCanonicalMedicalRecord = {
   veterinarianName?: string;
   clinicName?: string;
   notes?: string;
+  attachments?: OwnerAttachment[];
   createdAt: string;
   updatedAt: string;
 };
@@ -81,6 +83,17 @@ const MEDICAL_RECORD_FIELDS = `
   notes
   createdAt
   updatedAt
+  attachments {
+    id
+    medicalRecordId
+    fileName
+    contentType
+    size
+    clinicId
+    clinicName
+    uploadedByName
+    createdAt
+  }
 `;
 
 @Injectable()
